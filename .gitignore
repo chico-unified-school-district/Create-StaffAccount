@@ -1,0 +1,12 @@
+*.zip
+*.log
+log/
+logs/
+log/*
+logs/*
+*desktop.ini
+*.html
+*.cp
+*oauth2.txt
+lib/gam-64/oauth2.txt
+lib/gam/oauth2.txt

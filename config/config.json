@@ -1,0 +1,19 @@
+{
+ "o365":{
+  "a1license": "chicousd:STANDARDWOFFPACK_FACULTY",
+  "a3license": "chicousd:M365EDU_A3_FACULTY",
+  "a5license": "chicousd:M365EDU_A5_FACULTY"
+ },
+ "script": {
+  "siteContactsTest": 
+  [
+   "<JCooper@chicousd.net>"
+  ],
+  "siteContacts": 
+  [
+   "<JCooper@chicousd.net>",
+   "<bmccarthy@chicousd.org>"
+  ],
+  "sendLogTo": "<JCooper@chicousd.net>"
+ }
+}

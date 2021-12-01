@@ -1,0 +1,32 @@
+$params = @{
+ ActiveDirectoryCredential = $AdTasks
+ O365Credential            = $jenkinso
+ FileServerCredential      = $CreateHomeDir
+ EscapeServer              = 'silverbolt.chico.usd'
+ EscapeDatabase            = 'EscTest'
+ EscapeCred                = $EscapeCreds
+ IntermediateSqlServer     = 'skywarp.chico.usd\skywarp'
+ IntermediateDatabase      = 'CUSD-LF-Lookups'
+ NewAccountsTable          = 'new_employee_accounts'
+ IntermediateCredential    = $jenkinsLF
+ TargetOrgUnit             = 'OU=Substitue Teachers,OU=Teachers,OU=Employees,OU=Users,OU=Domain_Root,DC=chico,DC=usd'
+ Organization              = 'Chico Unified School District'
+}
+
+$scriptBlock = { Get-ADUser cs12345 | SELECT NAME }
+
+$global:counter = 0
+function myFunk {
+ process {
+  $global:counter
+  & $_
+  if ($global:counter -lt 5) {
+   sleep 1
+   $global:counter++
+   $_ | myFunk
+  }
+ }
+}
+$scriptBlock | myFunk
+exit
+

@@ -1,34 +1,32 @@
 [cmdletbinding()]
 param(
- [Alias('EmpID')]
- [int]$EmployeeID,
- [Alias('fn', 'NameFirst')]
- [string]$FirstName,
- [Alias('mn', 'NameMiddle')]
- [string]$MiddleName,
- [Alias('ln', 'NameLast')]
- [string]$LastName,
- [ValidateSet(500, 510, 520, 540, 550, 560, 570, 580, 600, 620, 640, 660, 740,
-  010, 020, 030, 050, 060, 070, 080, 090, 111, 110, 120, 130, 160, 180, 190,
-  200, 210, 230, 240, 250, 260, 270, 280, 380, 191, 330, 430, 440, 999)]
- [Alias('sc')]
- [int]$SiteCode,
- [switch]$SubAccount,
+ [Alias('ADCred')]
+ [System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
+ [Alias('MSCred')]
  [System.Management.Automation.PSCredential]$O365Credential,
+ [Alias('FSCred')]
  [System.Management.Automation.PSCredential]$FileServerCredential,
+ [Alias('ESCServer')]
  [string]$EscapeServer,
+ [Alias('ESCDB')]
  [string]$EscapeDatabase,
+ [Alias('ESCCred')]
  [System.Management.Automation.PSCredential]$EscapeCredential,
+ [Alias('IntServer')]
  [string]$IntermediateSqlServer,
+ [Alias('IntDB')]
  [string]$IntermediateDatabase,
+ [Alias('Table')]
  [string]$NewAccountsTable,
+ [Alias('IntCred')]
  [System.Management.Automation.PSCredential]$IntermediateCredential,
+ [Alias('OU')]
+ [string]$TargetOrgUnit,
+ [string]$Organization,
  [Alias('wi')]
  [switch]$WhatIf
 )
 
-$lookupTable = Get-Content -Path .\config\lookup-table.json | ConvertFrom-Json
-$config = Get-Content -Path .\config\config.json | ConvertFrom-Json
 
 # Imported Functions
 . .\lib\Create-ADUserObject.ps1
@@ -41,6 +39,7 @@ $config = Get-Content -Path .\config\config.json | ConvertFrom-Json
 . .\lib\Show-TestRun.ps1
 
 # Script Functions
+
 function cleanUp {
  Get-Module -name *tmp* | Remove-Module -Confirm:$false -Force
  Get-PSSession | Remove-PSSession -Confirm:$false
@@ -53,50 +52,190 @@ function Get-EscapeData {
  }
 }
 
-function userPropsObj {
- $hash = @{
-  name  = Create-Name -First $FirstName -Middle $MiddleName -Last $LastName
-  fn    = $FirstName
-  sam   = setSamid
-  empid = setEmpId
-  pw1   = Create-PassPhrase
-  pw2   = Create-PassPhrase
- }
- New-Object PSObject -Property $hash
-}
-function setEmpId ($empId) {
+function Get-UserData {
  process {
-  # create a large random number when employeeid is omitted
-  # A large int is used to ensure no overlap with the current Escape empId's scope
-  if (-not($empId)) { Get-Random -Min 100000000 -Max 1000000000 }
-  else { $empId }
- }
-}
-function setSamid {
- if ($EmployeeID) {
-  $userObj = Get-ADUser -LDAPFilter "(employeeID=$EmployeeID)"
-  if ($userObj) {
-   $userObj.samAccountName
-   return
+  $scriptBlock = [scriptblock]::Create($_)
+  if ($script:countThis -eq 0) { Write-Host ('{0} Running: {1}' -f (Get-Date), $_) }
+  $obj = & $scriptBlock
+  if ($obj) {
+   $script:countThis = 0
+   Write-Host ('{0} Success: {1}' -f (Get-Date), $_)
+   $obj
+  }
+  elseif ($script:countThis -lt 90) {
+   $script:countThis++
+   # Write-Host $script:countThis
+   Start-Sleep 60
+   $_ | Get-UserData
+  }
+  else {
+   Write-Host ('{0} Failed: {1}' -f (Get-Date), $_)
+   $script:countThis = 0
+   # break
   }
  }
- Create-Samid -First $FirstName -Middle $MiddleName -Last $LastName
 }
 
-cleanUp
-Show-TestRun
-
-'SqlServer' | Load-Module
-# 'ActiveDirectory', 'MSOnline', 'SqlServer' | Load-Module
-
-# Connect-MsolService -Credential $O365Credential -ErrorAction Stop
-
-# Create-O365PSSession -Credential $jcred
-if ($EmployeeId) { $userObj = Get-ADUser -LDAPFilter "(employeeID=$EmployeeID)" }
-if (-not($userObj)) {
- userPropsObj
+function New-UserPropObject {
+ process {
+  $newName = Create-Name -First $_.nameFirst -Middle $_.nameMiddle -Last $_.nameLast
+  $samId = $_ | Set-SamId
+  $empId = $_ | Set-EmpId
+  # $siteData = Set-Site -siteCode $_.siteCode
+  # $siteData
+  $hash = @{
+   fn         = $_.nameFirst
+   ln         = $_.nameLast
+   mi         = $_.nameMiddle
+   name       = $newName
+   samid      = $samId
+   empid      = $empId
+   emailHome  = $_.emailHome
+   emailWork  = $samid + '@chicousd.org'
+   gsuite     = $samid + '@chicousd.net'
+   siteDescr  = $_.SiteDescr
+   siteCode   = $_.siteCode
+   company    = $Organization
+   jobType    = $_.jobType
+   pw1        = Create-PassPhrase
+   pw2        = Create-PassPhrase
+   groups     = ''
+   fileServer = ''
+   targetOU   = $TargetOrgUnit
+  }
+  New-Object PSObject -Property $hash
+ }
 }
 
+function Set-EmpId {
+ process {
+  # create a large random number when employeeid is DBNULL
+  # A large int is used to ensure no overlap with the current Escape empId's scope
+  Write-Host 'trying to set EMPID'
+  if ( ([DBNull]::Value).Equals($_.empId) -or ($_.empId -eq 0)) { $id = Get-Random -Min 100000000 -Max 1000000000 }
+  else { $id = $_.empId }
+  Write-Host ('Empid set to [{0}]' -f $id)
+  $id
+ }
+}
+
+function Set-SamId {
+ process {
+  if ( ([DBNull]::Value).Equals($_.empId) ) {
+   Create-Samid -First $_.nameFirst -Middle $_.nameMIddle -Last $_.nameLast
+   return
+  }
+  $id = $_.empId
+  $obj = Get-ADUser -Filter "employeeID -eq `'$id`'" -ErrorAction SilentlyContinue
+  if ($obj) {
+   $obj.samAccountName
+   return
+  }
+  else {
+   Create-Samid -First $_.nameFirst -Middle $_.nameMIddle -Last $_.nameLast
+  }
+ }
+}
+
+function Set-Site {
+ process {
+  $sc = $_.siteCode
+  $sc
+  $lookupTable | Where-Object { $_.siteCode -eq $sc }
+ }
+}
+
+function Update-ADGroupMemberships {
+ process {
+  # Add user to various groups
+  $groups = 'Staff_Filtering', 'staffroom', 'Employee-Password-Policy'
+  if ( $_.groups ) { $groups += $_.groups.Split(",") }
+  Write-Host ('Adding {0} to {1}' -f $_.samid, $groups)
+  if ( -not$WhatIf ) { Add-ADPrincipalGroupMembership -Identity $_.samid -MemberOf $groups }
+ }
+}
+
+function Update-EscapeEmailWork {
+ process {
+  $checkEscapeUserSql = 'SELECT empId FROM HREmployment WHERE empID = {0}' -f $_.empid
+  Write-Verbose $checkEscapeUserSql
+  $escapeResult = Invoke-Sqlcmd @escapeDBParams -Query $checkEscapeUserSql
+  if ($escapeResult) {
+   $updateEscapeEmailSql = "UPDATE HREmployment SET EmailWork = `'{0}`' WHERE EmpID = {1}" -f $_.emailWork, $_.empid
+   Write-Host $updateEscapeEmailSql
+   if (-not$WhatIf) {
+    Invoke-SqlCmd @escapeDBParams -Query $updateEscapeEmailSql
+   }
+  }
+  else {
+   Write-Host ('{0} {1} not found in Escape' -f $_.empid, $_.emailWork)
+  }
+ }
+}
+
+function Update-IntDBEmailWork {
+ process {
+  $sql = "UPDATE {0} SET emailWork = `'{1}`' WHERE emailHome = `'{2}`'" -f $NewAccountsTable, $_.emailWork, $_.emailHome
+  Write-Verbose $sql
+  if (-not$WhatIf) { Invoke-SqlCmd @intermediateDBparams -Query $sql }
+ }
+}
+
+function Update-IntDBEmpID {
+ process {
+  $sql = "UPDATE new_employee_accounts SET empId = {0} WHERE emailHome = `'{1}`'" -f [long]$_.empid, $_.emailHome
+  Write-Verbose $sql
+  if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
+ }
+}
+
+function Update-IntDBTempPw {
+ process {
+  $sql = "UPDATE new_employee_accounts SET tempPw = `'{0}`' WHERE empId = {1}" -f $_.pw2, $_.empid
+  Write-Verbose $sql
+  if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
+ }
+}
+function Update-IntDBSamAccountName {
+ process {
+  $sql = "UPDATE new_employee_accounts SET samAccountName = `'{0}`' WHERE empId = {1}" -f $_.samid, $_.empid
+  Write-Verbose $sql
+  if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
+ }
+}
+function Update-IntDBSrcSys {
+ process {
+  $sql = "UPDATE new_employee_accounts SET sourceSystem = `'{0}`' WHERE empId = {1}" -f $ENV:COMPUTERNAME, $_.empid
+  Write-Verbose $sql
+  if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
+ }
+}
+
+function Update-MsolLicense {
+ begin { $targetLicense = 'chicousd:STANDARDWOFFPACK_FACULTY' }
+ process {
+  Write-Host ('[{0}] Assigning Msol Region [US] and License [{1}]' -f $_.emailWork, $targetLicense)
+  if (-not$WhatIf) {
+   Set-MsolUser -UserPrincipalName $_.emailWork -UsageLocation US -ErrorAction SilentlyContinue
+   Set-MsolUserLicense -UserPrincipalName $_.emailWork -AddLicenses $targetLicense -ErrorAction SilentlyContinue
+  }
+ }
+}
+
+function Update-PW {
+ process {
+  $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
+  Write-Host ( '{0} Updating Password' -f $_.samid )
+  if (-not$WhatIf) {
+   Set-ADAccountPassword -Identity $_.samid -NewPassword $securePw -Confirm:$false
+  }
+ }
+}
+
+# ==================================================================
+# ==================================================================
+
+$gam = '.\bin\gam-64\gam.exe'
 $escapeDBParams = @{
  Server     = $EscapeServer
  Database   = $EscapeDatabase
@@ -109,19 +248,89 @@ $intermediateDBparams = @{
  Credential = $IntermediateCredential
 }
 
-$newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
-$newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
-$newAccountData 
-# Create-ADUserObject
-# Create-HomeDir
-# Wait-DirSync
-# Assign-License
-# Wait-MailBoxCreate
-# Update-EscapeEmail
-# Wait-GSuiteSync
-# Update-PW
-# Format-Emails
-# Send-Emails
+# ==================================================================
+# ==================================================================
 
-cleanUp
-Show-TestRun
+$stopTime = Get-Date "6:00pm"
+'Process looping once a minute until {0}' -f $stopTime
+do {
+ if ($WhatIf) { Show-TestRun }
+ cleanUp
+
+ $lookupTable = Get-Content -Path .\config\lookup-table.json | ConvertFrom-Json
+ # $config = Get-Content -Path .\config\config.json | ConvertFrom-Json
+
+ $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
+ $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
+ if ($newAccountData) {
+  'ActiveDirectory', 'MSOnline', 'SqlServer' | Load-Module
+  Connect-MsolService -Credential $O365Credential -ErrorAction Stop
+  Create-O365PSSession -Credential $O365Credential
+ }
+
+ # Create New User Data Variables
+ $varList = @()
+ foreach ($row in $newAccountData) {
+  $personData = $row | New-UserPropObject
+  $site = $lookupTable | Where-Object { ($_.SiteDescr -eq $row.siteDescr) -or ($_.SiteCode -eq $row.siteId) }
+  $personData.groups = $site.groups
+  $personData.fileServer = $site.fileServer
+  $varName = $personData.samId
+  $varList += $varName
+  New-Variable -Name $varName -Value $personData -Scope Script
+ }
+
+ foreach ($var in $varList) {
+  "+++++++++++++++++++++Create AD Accounts and Home Directories+++++++++++++++++++"
+  $userData = Get-Variable -Name $var -ValueOnly
+  $userData
+  $userData | Create-ADUserObject
+  $userData | Update-ADGroupMemberships
+  $userData | Update-IntDBEmpID
+  Create-StaffHomeDir -userData $userData -ServerCredential $FileServerCredential -WhatIf:$WhatIf
+ }
+
+ foreach ($var in $varList) {
+  "===============Wait for Azure sync and assign Microsoft licensing=================="
+  $userData = Get-Variable -Name $var -ValueOnly
+  $userData
+  $script:countThis = 0
+
+  $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork
+  $msolUser = $msolBlock | Get-UserData
+  if (-not($msolUser)) { continue }
+  # # Add MS license if needed
+  if ($msolUser.IsLicensed -eq $false ) {
+   $userData | Update-MsolLicense
+   $msolUser = $msolBlock | Get-UserData
+   if ($msolUser.IsLicensed -eq $false) {
+    '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
+    continue
+   }
+  }
+  $mailBoxBlock = "Get-Mailbox -Identity {0} -ErrorAction SilentlyContinue" -f $userData.emailWork
+  if (-not($mailBoxBlock | Get-UserData)) { continue }
+
+  $gsuiteBlock = "(`$guser = .`$gam print users query `"email:{0}`" | ConvertFrom-Csv)*>`$null;`$guser" -f $userData.gsuite
+  $gsuiteData = $gsuiteBlock | Get-UserData
+  if (-not($gsuiteData)) { continue } else { Start-Sleep 60; $gsuiteData }
+
+  $userData | Update-EscapeEmailWork
+  $userData | Update-IntDBSamAccountName
+  $userData | Update-PW
+  $userData | Update-IntDBTempPw
+  $userData | Update-IntDBSrcSys
+  $userData | Update-IntDBEmailWork
+ }
+
+ foreach ($var in $varList) {
+  Get-Variable -Name $var | Remove-Variable -Confirm:$false
+ }
+
+ cleanUp
+ if ($WhatIf) { Show-TestRun }
+ if (-not$WhatIf) {
+  # Loop once a minute
+  Start-Sleep 60
+ }
+} until ($WhatIf -or ((Get-Date) -ge $stopTime))

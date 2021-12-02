@@ -43,11 +43,12 @@ function Create-ADUserObject {
      '[{0}]Account Expiration set to [{1}]' -f $samid, $accountExpirationDate
      Set-ADUser -Identity $samid -AccountExpirationDate $AccountExpirationDate
     }
- 
-    if ( -not([DBNull]::Value).Equals($_.mi) ) {
+
+    if ( -not([DBNull]::Value).Equals($_.mi) -and ($_.mi.length -gt 0)) {
      $middleName = $_.mi
      Set-ADUser $samid -replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) }
     }
+    #TODO
     # if ( $BargUnitId ) {
     #  Set-ADUser $samid -add @{extensionAttribute1 = "$bargUnitID" }
     # }
@@ -62,10 +63,11 @@ function Create-ADUserObject {
     Set-ADUser $samid -replace @{co = 'United States' }
     Set-ADUser $samid -replace @{countryCode = 840 }
    }
-   if (-not$WhatIf) { Start-Sleep 7 }
   } # End New-ADUser
   # AD Sync Delay
-  Get-ADUser -Filter $ -Properties * | Select-Object name, proxyAddresses
+  if (-not$WhatIf) { Start-Sleep 7 }
+  Write-Verbose 'Gettings AD user afterobject  creation and extra attributes applied'
+  Get-ADUser -Filter $filter -Properties * | Select-Object name, proxyAddresses
  }
  end { Write-Host 'End Create-ADUserObject' }
 }

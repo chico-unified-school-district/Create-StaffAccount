@@ -4,6 +4,8 @@ log/
 logs/
 log/*
 logs/*
+./json/site-lookup-table.json
+site-lookup-table.json
 *desktop.ini
 *.html
 *.cp

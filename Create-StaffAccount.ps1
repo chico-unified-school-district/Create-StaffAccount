@@ -58,22 +58,24 @@ function Get-UserData {
  process {
   $scriptBlock = [scriptblock]::Create($_)
   if ($script:countThis -eq 0) { Write-Host ('{0} Running: {1}' -f (Get-Date), $_) }
-  $obj = & $scriptBlock
-  if ($obj) {
-   $script:countThis = 0
-   Write-Host ('{0} Success: {1}' -f (Get-Date), $_)
-   $obj
-  }
-  elseif ($script:countThis -lt 90) {
-   $script:countThis++
-   # Write-Host $script:countThis
-   Start-Sleep 60
-   $_ | Get-UserData
-  }
-  else {
-   Write-Host ('{0} Failed: {1}' -f (Get-Date), $_)
-   $script:countThis = 0
-   # break
+  if (-not($WhatIf)) {
+   $obj = & $scriptBlock
+   if ($obj) {
+    $script:countThis = 0
+    Write-Host ('{0} Success: {1}' -f (Get-Date), $_)
+    $obj
+   }
+   elseif ($script:countThis -lt 90) {
+    $script:countThis++
+    # Write-Host $script:countThis
+    Start-Sleep 60
+    $_ | Get-UserData
+   }
+   else {
+    Write-Host ('{0} Failed: {1}' -f (Get-Date), $_)
+    $script:countThis = 0
+    # break
+   }
   }
  }
 }
@@ -260,15 +262,14 @@ do {
  if ($WhatIf) { Show-TestRun }
  cleanUp
 
- $lookupTable = Get-Content -Path .\config\lookup-table.json | ConvertFrom-Json
- # $config = Get-Content -Path .\config\config.json | ConvertFrom-Json
+ $lookupTable = Get-Content -Path .\json\site-lookup-table.json | ConvertFrom-Json
 
  $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
  $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
  if ($newAccountData) {
   'ActiveDirectory', 'MSOnline', 'SqlServer' | Load-Module
 
-  $adSession = New-PSSession -ComputerName $DomainController -Credential $ADCredential
+  $adSession = New-PSSession -ComputerName $DomainController -Credential $ActiveDirectoryCredential
   Import-PSSession -Session $adSession -Module ActiveDirectory -AllowClobber | Out-Null
 
   Connect-MsolService -Credential $O365Credential -ErrorAction Stop
@@ -290,7 +291,8 @@ do {
  foreach ($var in $varList) {
   "+++++++++++++++++++++Create AD Accounts and Home Directories+++++++++++++++++++"
   $userData = Get-Variable -Name $var -ValueOnly
-  Write-Host ( '{0} {1} Phase I' -f $userdate.empid , $userData.emailWork )
+  Write-Host ( '{0} {1} Phase I' -f $userData.empid , $userData.emailWork )
+  Write-Verbose ( $userData | Out-String )
   $userData | Create-ADUserObject
   $userData | Update-ADGroupMemberships
   $userData | Update-IntDBEmpID
@@ -300,12 +302,12 @@ do {
  foreach ($var in $varList) {
   "===============Wait for Azure sync and assign Microsoft licensing=================="
   $userData = Get-Variable -Name $var -ValueOnly
-  Write-Host ( '{0} {1} Phase II' -f $userdate.empid , $userData.emailWork )
+  Write-Host ( '{0} {1} Phase II' -f $userData.empid , $userData.emailWork )
   $script:countThis = 0
 
   $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork
   $msolUser = $msolBlock | Get-UserData
-  if (-not($msolUser)) { continue }
+  if (-not($msolUser)) { if (-not($WhatIf)) { continue } }
   # # Add MS license if needed
   if ($msolUser.IsLicensed -eq $false ) {
    $userData | Update-MsolLicense
@@ -313,18 +315,20 @@ do {
    if ($msolUser.IsLicensed -eq $false) {
     $errorMsg = '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
     Write-Error $errorMsg
-    continue
+    if (-not($WhatIf)) { continue }
    }
    else {
     '{0} {1} Licensing Succeeded.' -f $userData.empid, $userData.emailWork
    }
   }
   $mailBoxBlock = "Get-Mailbox -Identity {0} -ErrorAction SilentlyContinue" -f $userData.emailWork
-  if (-not($mailBoxBlock | Get-UserData)) { continue }
+  if (-not($mailBoxBlock | Get-UserData)) { if (-not($WhatIf)) { continue } }
 
   $gsuiteBlock = "(`$guser = .`$gam print users query `"email:{0}`" | ConvertFrom-Csv)*>`$null;`$guser" -f $userData.gsuite
   $gsuiteData = $gsuiteBlock | Get-UserData
-  if (-not($gsuiteData)) { continue } else { Start-Sleep 60; $gsuiteData }
+  if (-not($gsuiteData)) { if (-not($WhatIf)) { continue } } else { Start-Sleep 60; $gsuiteData }
+
+  Write-Host ( '{0} {1} Phase III' -f $userData.empid , $userData.emailWork )
 
   $userData | Update-EscapeEmailWork
   $userData | Update-IntDBSamAccountName

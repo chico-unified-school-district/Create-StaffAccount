@@ -256,7 +256,7 @@ $intermediateDBparams = @{
 # ==================================================================
 # ==================================================================
 
-$stopTime = Get-Date "6:00pm"
+$stopTime = Get-Date "11:00pm"
 'Process looping once a minute until {0}' -f $stopTime
 do {
  if ($WhatIf) { Show-TestRun }

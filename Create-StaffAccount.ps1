@@ -1,5 +1,7 @@
 [cmdletbinding()]
 param(
+ [Alias('DC')]
+ [string]$DomainController,
  [Alias('ADCred')]
  [System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
  [Alias('MSCred')]

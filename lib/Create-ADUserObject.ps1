@@ -65,7 +65,7 @@ function Create-ADUserObject {
    if (-not$WhatIf) { Start-Sleep 7 }
   } # End New-ADUser
   # AD Sync Delay
-  Get-ADUser -Filter $filter
+  Get-ADUser -Filter $ -Properties * | Select-Object name, proxyAddresses
  }
  end { Write-Host 'End Create-ADUserObject' }
 }

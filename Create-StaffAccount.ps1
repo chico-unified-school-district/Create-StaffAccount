@@ -236,6 +236,7 @@ function Update-PW {
 # ==================================================================
 
 $gam = '.\bin\gam-64\gam.exe'
+Write-Verbose ( 'gam path: {0}' -f $gam )
 $escapeDBParams = @{
  Server     = $EscapeServer
  Database   = $EscapeDatabase
@@ -264,6 +265,10 @@ do {
  $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
  if ($newAccountData) {
   'ActiveDirectory', 'MSOnline', 'SqlServer' | Load-Module
+
+  $adSession = New-PSSession -ComputerName $DomainController -Credential $ADCredential
+  Import-PSSession -Session $adSession -Module ActiveDirectory -AllowClobber | Out-Null
+
   Connect-MsolService -Credential $O365Credential -ErrorAction Stop
   Create-O365PSSession -Credential $O365Credential
  }
@@ -283,7 +288,7 @@ do {
  foreach ($var in $varList) {
   "+++++++++++++++++++++Create AD Accounts and Home Directories+++++++++++++++++++"
   $userData = Get-Variable -Name $var -ValueOnly
-  $userData
+  Write-Host ( '{0} {1} Phase I' -f $userdate.empid , $userData.emailWork )
   $userData | Create-ADUserObject
   $userData | Update-ADGroupMemberships
   $userData | Update-IntDBEmpID
@@ -293,7 +298,7 @@ do {
  foreach ($var in $varList) {
   "===============Wait for Azure sync and assign Microsoft licensing=================="
   $userData = Get-Variable -Name $var -ValueOnly
-  $userData
+  Write-Host ( '{0} {1} Phase II' -f $userdate.empid , $userData.emailWork )
   $script:countThis = 0
 
   $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork
@@ -304,8 +309,12 @@ do {
    $userData | Update-MsolLicense
    $msolUser = $msolBlock | Get-UserData
    if ($msolUser.IsLicensed -eq $false) {
-    '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
+    $errorMsg = '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
+    Write-Error $errorMsg
     continue
+   }
+   else {
+    '{0} {1} Licensing Succeeded.' -f $userData.empid, $userData.emailWork
    }
   }
   $mailBoxBlock = "Get-Mailbox -Identity {0} -ErrorAction SilentlyContinue" -f $userData.emailWork
@@ -321,6 +330,7 @@ do {
   $userData | Update-IntDBTempPw
   $userData | Update-IntDBSrcSys
   $userData | Update-IntDBEmailWork
+  '{0} {1} Account creation complete' -f $userData.empid, $userData.emailWork
  }
 
  foreach ($var in $varList) {

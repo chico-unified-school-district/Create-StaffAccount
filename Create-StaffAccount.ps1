@@ -144,7 +144,7 @@ function Set-SamId {
 function Set-Site {
  process {
   $sc = $_.siteCode
-  $sc
+  Write-Host ('{0} {1} {2} {3} Determining site data' -f $_.empid, $_.fn, $_.ln, $sc)
   $lookupTable | Where-Object { $_.siteCode -eq $sc }
  }
 }
@@ -280,7 +280,8 @@ do {
  $varList = @()
  foreach ($row in $newAccountData) {
   $personData = $row | New-UserPropObject
-  $site = $lookupTable | Where-Object { ($_.SiteDescr -eq $row.siteDescr) -or ($_.SiteCode -eq $row.siteId) }
+  # $site = $lookupTable | Where-Object { ($_.SiteDescr -eq $row.siteDescr) -or ($_.SiteCode -eq $row.siteId) | Select-Object -First 1 }
+  $site = $personData | Set-Site
   $personData.groups = $site.groups
   $personData.fileServer = $site.fileServer
   $varName = $personData.samId
@@ -291,6 +292,7 @@ do {
  foreach ($var in $varList) {
   "+++++++++++++++++++++Create AD Accounts and Home Directories+++++++++++++++++++"
   $userData = Get-Variable -Name $var -ValueOnly
+  $userData
   Write-Host ( '{0} {1} Phase I' -f $userData.empid , $userData.emailWork )
   Write-Verbose ( $userData | Out-String )
   $userData | Create-ADUserObject

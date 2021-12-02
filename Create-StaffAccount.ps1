@@ -267,7 +267,7 @@ do {
  $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
  $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
  if ($newAccountData) {
-  'ActiveDirectory', 'MSOnline', 'SqlServer' | Load-Module
+  'MSOnline', 'SqlServer' | Load-Module
 
   $adSession = New-PSSession -ComputerName $DomainController -Credential $ActiveDirectoryCredential
   Import-PSSession -Session $adSession -Module ActiveDirectory -AllowClobber | Out-Null

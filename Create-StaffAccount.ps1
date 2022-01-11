@@ -145,7 +145,7 @@ function Set-Site {
  process {
   $sc = $_.siteCode
   Write-Host ('{0} {1} {2} {3} Determining site data' -f $_.empid, $_.fn, $_.ln, $sc)
-  $lookupTable | Where-Object { $_.siteCode -eq $sc }
+  $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
  }
 }
 
@@ -154,7 +154,7 @@ function Update-ADGroupMemberships {
   # Add user to various groups
   $groups = 'Staff_Filtering', 'staffroom', 'Employee-Password-Policy'
   if ( $_.groups ) { $groups += $_.groups.Split(",") }
-  Write-Host ('Adding {0} to {1}' -f $_.samid, $groups)
+  Write-Host ('Adding {0} to {1}' -f $_.samid, ($groups -join ','))
   if ( -not$WhatIf ) { Add-ADPrincipalGroupMembership -Identity $_.samid -MemberOf $groups }
  }
 }
@@ -179,7 +179,7 @@ function Update-EscapeEmailWork {
 
 function Update-IntDBEmailWork {
  process {
-  $sql = "UPDATE {0} SET emailWork = `'{1}`' WHERE emailHome = `'{2}`'" -f $NewAccountsTable, $_.emailWork, $_.emailHome
+  $sql = "UPDATE {0} SET emailWork = `'{1}`', dts = CURRENT_TIMESTAMP WHERE emailHome = `'{2}`'" -f $NewAccountsTable, $_.emailWork, $_.emailHome
   Write-Verbose $sql
   if (-not$WhatIf) { Invoke-SqlCmd @intermediateDBparams -Query $sql }
  }
@@ -295,6 +295,7 @@ do {
   $userData
   Write-Host ( '{0} {1} Phase I' -f $userData.empid , $userData.emailWork )
   Write-Verbose ( $userData | Out-String )
+  Write-Debug 'User settings ok?'
   $userData | Create-ADUserObject
   $userData | Update-ADGroupMemberships
   $userData | Update-IntDBEmpID

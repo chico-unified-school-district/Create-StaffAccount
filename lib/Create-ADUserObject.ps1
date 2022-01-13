@@ -4,7 +4,8 @@ function Create-ADUserObject {
   $shortTermTypes = 'student teacher', 'coach', 'volunteer'
  }
  process {
-  $filter = " samAccountName -eq `'{0}`' " -f $_.samid
+  # $filter = " samAccountName -eq `'{0}`' -or employeeId -eq `'{1}`'" -f $_.samid, $_.empId
+  $filter = "employeeId -eq `'{0}`'" -f $_.empId
   $obj = Get-ADUser -Filter $filter
   if (-not$obj) {
    $securePw = ConvertTo-SecureString -String $_.pw1 -AsPlainText -Force

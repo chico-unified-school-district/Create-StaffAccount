@@ -112,6 +112,15 @@ function New-UserPropObject {
 }
 
 function Set-EmpId {
+ begin {
+  function New-RandomEmpId {
+   $id = Get-Random -Min 100000000 -Max 1000000000
+   $filter = " employeeId -eq `'{0}`' " -f $id
+   $obj = Get-ADuser -Filter $filter
+   if (-not$obj ) { $id }
+   else { New-RandomEmpId }
+  }
+ }
  process {
   # create a large random number when employeeid is DBNULL
   # A large int is used to ensure no overlap with the current Escape empId's scope
@@ -145,7 +154,10 @@ function Set-Site {
  process {
   $sc = $_.siteCode
   Write-Host ('{0} {1} {2} {3} Determining site data' -f $_.empid, $_.fn, $_.ln, $sc)
-  $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
+  $siteData = $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
+  if (-not$siteData) { return }
+  Write-Host ('{0} {1} {2} {3} {4} Site' -f $_.empid, $_.fn, $_.ln, $sc, $siteData.SiteDescr)
+  $siteData
  }
 }
 
@@ -349,7 +361,7 @@ do {
  cleanUp
  if ($WhatIf) { Show-TestRun }
  if (-not$WhatIf) {
-  # Loop once a minute
+  # Loop delay
   Start-Sleep 60
  }
 } until ($WhatIf -or ((Get-Date) -ge $stopTime))

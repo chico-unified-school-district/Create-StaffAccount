@@ -269,7 +269,8 @@ $intermediateDBparams = @{
 # ==================================================================
 
 $stopTime = Get-Date "11:00pm"
-'Process looping once a minute until {0}' -f $stopTime
+$delay = 60
+'Process looping every {0} seconds until {1}' -f $delay, $stopTime
 do {
  if ($WhatIf) { Show-TestRun }
  cleanUp
@@ -362,6 +363,6 @@ do {
  if ($WhatIf) { Show-TestRun }
  if (-not$WhatIf) {
   # Loop delay
-  Start-Sleep 60
+  Start-Sleep $delay
  }
 } until ($WhatIf -or ((Get-Date) -ge $stopTime))

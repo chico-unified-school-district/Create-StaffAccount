@@ -308,7 +308,11 @@ do {
   Write-Host ( '{0} {1} Phase I' -f $userData.empid , $userData.emailWork )
   Write-Verbose ( $userData | Out-String )
   Write-Debug 'User settings ok?'
-  $userData | Create-ADUserObject
+  $checkUser = $userData | Create-ADUserObject
+  if ($checkUser.LastLogonDate -is [datetime]) {
+   Write-Host ('{0}, LastLogonDate already present. User account exists and is in use. Skipping Phase I' -f $checkUser.mail)
+   continue
+  }
   $userData | Update-ADGroupMemberships
   $userData | Update-IntDBEmpID
   Create-StaffHomeDir -userData $userData -ServerCredential $FileServerCredential -WhatIf:$WhatIf
@@ -318,6 +322,12 @@ do {
   "===============Wait for Azure sync and assign Microsoft licensing=================="
   $userData = Get-Variable -Name $var -ValueOnly
   Write-Host ( '{0} {1} Phase II' -f $userData.empid , $userData.emailWork )
+  $checkUser = $userData | Create-ADUserObject
+  if ($checkUser.LastLogonDate -is [datetime]) {
+   Write-Host ('{0}, LastLogonDate already present. User account exists and is in use. Skipping Phases II & II' -f $checkUser.mail)
+   continue
+  }
+  
   $script:countThis = 0
 
   $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork

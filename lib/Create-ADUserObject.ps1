@@ -6,7 +6,7 @@ function Create-ADUserObject {
  process {
   # $filter = " samAccountName -eq `'{0}`' -or employeeId -eq `'{1}`'" -f $_.samid, $_.empId
   $filter = "employeeId -eq `'{0}`'" -f $_.empId
-  $obj = Get-ADUser -Filter $filter
+  $obj = Get-ADUser -Filter $filter -Properties *
   if (-not$obj) {
    $securePw = ConvertTo-SecureString -String $_.pw1 -AsPlainText -Force
    $attributes = @{
@@ -67,8 +67,8 @@ function Create-ADUserObject {
   } # End New-ADUser
   # AD Sync Delay
   if (-not$WhatIf) { Start-Sleep 7 }
-  Write-Verbose 'Gettings AD user afterobject  creation and extra attributes applied'
-  Get-ADUser -Filter $filter -Properties * | Select-Object name, proxyAddresses
+  Write-Verbose 'Gettings AD user afte robject creation and extra attributes applied'
+  Get-ADUser -Filter $filter -Properties * | Select-Object name, proxyAddresses, LastLogonDate
  }
  end { Write-Host 'End Create-ADUserObject' }
 }

@@ -88,6 +88,7 @@ function New-UserPropObject {
   # $siteData = Set-Site -siteCode $_.siteCode
   # $siteData
   $hash = @{
+   id         = $_.id
    fn         = $_.nameFirst
    ln         = $_.nameLast
    mi         = $_.nameMiddle
@@ -191,38 +192,38 @@ function Update-EscapeEmailWork {
 
 function Update-IntDBEmailWork {
  process {
-  $sql = "UPDATE {0} SET emailWork = `'{1}`', dts = CURRENT_TIMESTAMP WHERE emailHome = `'{2}`'" -f $NewAccountsTable, $_.emailWork, $_.emailHome
-  Write-Verbose $sql
+  $sql = "UPDATE {0} SET emailWork = `'{1}`', dts = CURRENT_TIMESTAMP WHERE id = {2}" -f $NewAccountsTable, $_.emailWork, $_.id
+  Write-Host $sql
   if (-not$WhatIf) { Invoke-SqlCmd @intermediateDBparams -Query $sql }
  }
 }
 
 function Update-IntDBEmpID {
  process {
-  $sql = "UPDATE new_employee_accounts SET empId = {0} WHERE emailHome = `'{1}`'" -f [long]$_.empid, $_.emailHome
-  Write-Verbose $sql
+  $sql = "UPDATE {0} SET empId = {1} WHERE id = `'{2}`'" -f $NewAccountsTable, [long]$_.empid, $_.id
+  Write-Host $sql
   if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
  }
 }
 
 function Update-IntDBTempPw {
  process {
-  $sql = "UPDATE new_employee_accounts SET tempPw = `'{0}`' WHERE empId = {1}" -f $_.pw2, $_.empid
-  Write-Verbose $sql
+  $sql = "UPDATE {0} SET tempPw = `'{1}`' WHERE id = {2}" -f $NewAccountsTable, $_.pw2, $_.id
+  Write-Host $sql
   if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
  }
 }
 function Update-IntDBSamAccountName {
  process {
-  $sql = "UPDATE new_employee_accounts SET samAccountName = `'{0}`' WHERE empId = {1}" -f $_.samid, $_.empid
-  Write-Verbose $sql
+  $sql = "UPDATE {0} SET samAccountName = `'{1}`' WHERE id = {2}" -f $NewAccountsTable, $_.samid, $_.id
+  Write-Host $sql
   if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
  }
 }
 function Update-IntDBSrcSys {
  process {
-  $sql = "UPDATE new_employee_accounts SET sourceSystem = `'{0}`' WHERE empId = {1}" -f $ENV:COMPUTERNAME, $_.empid
-  Write-Verbose $sql
+  $sql = "UPDATE {0} SET sourceSystem = `'{1}`' WHERE id = {2}" -f $NewAccountsTable, $ENV:COMPUTERNAME, $_.id
+  Write-Host $sql
   if (-not$WhatIf) { Invoke-Sqlcmd @intermediateDBparams -Query $sql }
  }
 }
@@ -249,10 +250,9 @@ function Update-PW {
 }
 
 # ==================================================================
-# ==================================================================
 
 $gam = '.\bin\gam-64\gam.exe'
-Write-Verbose ( 'gam path: {0}' -f $gam )
+Write-Host ( 'gam path: {0}' -f $gam )
 $escapeDBParams = @{
  Server     = $EscapeServer
  Database   = $EscapeDatabase
@@ -265,7 +265,6 @@ $intermediateDBparams = @{
  Credential = $IntermediateCredential
 }
 
-# ==================================================================
 # ==================================================================
 
 $stopTime = Get-Date "11:00pm"

@@ -327,7 +327,7 @@ do {
    Write-Host ('{0}, LastLogonDate already present. User account exists and is in use. Skipping Phases II & II' -f $checkUser.mail)
    continue
   }
-  
+
   $script:countThis = 0
 
   $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork

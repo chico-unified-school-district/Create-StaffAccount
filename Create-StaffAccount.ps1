@@ -197,6 +197,13 @@ function Update-IntDBEmailWork {
   if (-not$WhatIf) { Invoke-SqlCmd @intermediateDBparams -Query $sql }
  }
 }
+function Update-IntDBGsuite {
+ process {
+  $sql = "UPDATE {0} SET gsuite = `'{1}`' WHERE id = {2}" -f $NewAccountsTable, $_.gsuite, $_.id
+  Write-Host $sql
+  if (-not$WhatIf) { Invoke-SqlCmd @intermediateDBparams -Query $sql }
+ }
+}
 
 function Update-IntDBEmpID {
  process {
@@ -361,6 +368,7 @@ do {
   $userData | Update-IntDBTempPw
   $userData | Update-IntDBSrcSys
   $userData | Update-IntDBEmailWork
+  $userData | Update-IntDBGsuite
   '{0} {1} Account creation complete' -f $userData.empid, $userData.emailWork
  }
 

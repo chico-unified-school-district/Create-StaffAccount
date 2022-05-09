@@ -367,8 +367,8 @@ do {
   $userData | Update-PW
   $userData | Update-IntDBTempPw
   $userData | Update-IntDBSrcSys
-  $userData | Update-IntDBEmailWork
   $userData | Update-IntDBGsuite
+  $userData | Update-IntDBEmailWork
   '{0} {1} Account creation complete' -f $userData.empid, $userData.emailWork
  }
 

@@ -1,3 +1,20 @@
+<#
+ .Synopsis
+ This script monitors an external employee database for new entries. when a new entry is detected
+ the process performs various activities to prepare an account for use in the organization:
+ - Active Directory Account
+ - Home Directory
+ - Office 365 Account
+ - GSuite Account
+ .DESCRIPTION
+ This process creates accounts and home directories.
+ This process is meant to be run every morning and run at intervals until a specified time every evening.
+ .EXAMPLE
+ .EXAMPLE
+ .INPUTS
+ .OUTPUTS
+ .NOTES
+#>
 [cmdletbinding()]
 param(
  [Alias('DC')]

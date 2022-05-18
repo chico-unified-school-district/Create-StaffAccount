@@ -10,25 +10,31 @@ function Create-Name {
  )
  begin {
   # $First + $Middle + $Last
-  function nameFree {
+  function Confirm-FreeName {
    process {
     if (-not(Get-ADUser -LDAPFilter "(name=$_)")) { $_ ; return }
    }
   }
+  function Format-FirstLetter ($str) {
+   $str.substring(0, 1).ToUpper() + $str.substring(1)
+  }
  }
  process {
+  $fn = Format-FirstLetter $First
+  $mn = Format-FirstLetter $Middle
+  $ln = Format-FirstLetter $Last
   $list = @(
-   $First, $Last -join ' '
-   if ($Middle.Length -eq 1) { $First, $Middle, $Last -join ' ' }
-   if ($Middle.Length -gt 1) { $First, $Middle.Substring(0, 1), $Last -join ' ' }
-   if ($Middle.Length -gt 1) { $First, $Middle.Substring, $Last -join ' ' }
-   $First, $Last, 2 -join ' '
-   $First, $Last, 3 -join ' '
+   $fn, $ln -join ' '
+   if ($mn.Length -eq 1) { $fn, $mn, $ln -join ' ' }
+   if ($mn.Length -gt 1) { $fn, $mn.Substring(0, 1), $ln -join ' ' }
+   if ($mn.Length -gt 1) { $fn, $mn.Substring, $ln -join ' ' }
+   $fn, $ln, 2 -join ' '
+   $fn, $ln, 3 -join ' '
   )
   # $list
   foreach ($n in $list) {
    # pick the first valid, free name from the list array
-   if ($n | namefree) {
+   if ($n | Confirm-FreeName) {
     $n
     return
    }

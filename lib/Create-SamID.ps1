@@ -9,6 +9,10 @@ function Create-SamID {
   [string]$Last
  )
 
+ function Format-FirstLetter ($str) {
+  $str.substring(0, 1).ToUpper() + $str.substring(1)
+ }
+
  function makeNameObj ($f, $m, $l) {
   New-Object psobject -Property @{
    f = removeNonLetters $f
@@ -17,7 +21,7 @@ function Create-SamID {
   }
  }
  function outputFreeSam ($sam) {
-  if ( 
+  if (
    -not( Get-ADUser -LDAPFilter "(samAccountName=$sam)" ) -and
    -not( Get-ADUser -LDAPFilter "(proxyaddresses=smtp:$sam@*)" )
   ) { $sam }
@@ -45,6 +49,6 @@ function Create-SamID {
   }
  }
  # process
- $nameObj = makeNameObj -f $First -m $Middle -l $Last
+ $nameObj = makeNameObj -f (Format-FirstLetter $First) -m (Format-FirstLetter $Middle) -l (Format-FirstLetter $Last)
  testSams $nameObj | truncateSam
 }

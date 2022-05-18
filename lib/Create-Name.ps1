@@ -16,7 +16,11 @@ function Create-Name {
    }
   }
   function Format-FirstLetter ($str) {
-   $str.substring(0, 1).ToUpper() + $str.substring(1)
+   # This capitalizes the 1st letter of each word in a string.
+   $strArr = $str -split ' '
+   $newArr = @()
+   $strArr.foreach({ $newArr += $_.substring(0, 1).ToUpper() + $_.substring(1) })
+   $newArr -join ' '
   }
  }
  process {

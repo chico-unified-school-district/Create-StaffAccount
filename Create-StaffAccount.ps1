@@ -63,7 +63,6 @@ function cleanUp {
  Get-Module -name *tmp* | Remove-Module -Confirm:$false -Force
  Get-PSSession | Remove-PSSession -Confirm:$false
 }
-
 function Get-EscapeData {
  process {
   $sql = 'SELECT * FROM vwHREmployementList WHERE empId = {0}' -f $_
@@ -98,6 +97,15 @@ function Get-UserData {
 }
 
 function New-UserPropObject {
+ begin {
+  function Format-FirstLetter ($str) {
+   # This capitalizes the 1st letter of each word in a string.
+   $strArr = $str -split ' '
+   $newArr = @()
+   $strArr.foreach({ $newArr += $_.substring(0, 1).ToUpper() + $_.substring(1) })
+   $newArr -join ' '
+  }
+ }
  process {
   $newName = Create-Name -First $_.nameFirst -Middle $_.nameMiddle -Last $_.nameLast
   $samId = $_ | Set-SamId
@@ -106,9 +114,9 @@ function New-UserPropObject {
   # $siteData
   $hash = @{
    id         = $_.id
-   fn         = $_.nameFirst
-   ln         = $_.nameLast
-   mi         = $_.nameMiddle
+   fn         = Format-FirstLetter $_.nameFirst
+   ln         = Format-FirstLetter $_.nameLast
+   mi         = Format-FirstLetter $_.nameMiddle
    name       = $newName
    samid      = $samId
    empid      = $empId
@@ -316,7 +324,6 @@ do {
  $varList = @()
  foreach ($row in $newAccountData) {
   $personData = $row | New-UserPropObject
-  # $site = $lookupTable | Where-Object { ($_.SiteDescr -eq $row.siteDescr) -or ($_.SiteCode -eq $row.siteId) | Select-Object -First 1 }
   $site = $personData | Set-Site
   $personData.groups = $site.groups
   $personData.fileServer = $site.fileServer

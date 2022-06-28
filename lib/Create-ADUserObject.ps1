@@ -67,8 +67,8 @@ function Create-ADUserObject {
   } # End New-ADUser
   # AD Sync Delay
   if (-not$WhatIf) { Start-Sleep 7 }
-  Write-Verbose 'Gettings AD user afte robject creation and extra attributes applied'
-  Get-ADUser -Filter $filter -Properties * | Select-Object name, proxyAddresses, LastLogonDate
+  Write-Verbose 'Gettings AD user after object creation and extra attributes applied'
+  Get-ADUser -Filter $filter -Properties *
  }
  end { Write-Host 'End Create-ADUserObject' }
 }

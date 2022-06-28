@@ -100,14 +100,23 @@ function New-UserPropObject {
  begin {
   function Format-FirstLetter ($str) {
    # This capitalizes the 1st letter of each word in a string.
-   $strArr = $str -split ' '
-   $newArr = @()
-   $strArr.foreach({ $newArr += $_.substring(0, 1).ToUpper() + $_.substring(1) })
-   $newArr -join ' '
+   if ($str -and $str.length -gt 0) {
+    $strArr = $str -split ' '
+    $newArr = @()
+    $strArr.foreach({ $newArr += $_.substring(0, 1).ToUpper() + $_.substring(1) })
+    $newArr -join ' '
+   }
   }
  }
  process {
-  $newName = Create-Name -First $_.nameFirst -Middle $_.nameMiddle -Last $_.nameLast
+  $filter = "employeeId -eq `'{0}`'" -f $_.empId
+  $obj = Get-ADUser -Filter $filter -Properties *
+  if ($obj) {
+   $newName = $obj.name
+  }
+  else {
+   $newName = Create-Name -First $_.nameFirst -Middle $_.nameMiddle -Last $_.nameLast
+  }
   $samId = $_ | Set-SamId
   $empId = $_ | Set-EmpId
   # $siteData = Set-Site -siteCode $_.siteCode
@@ -352,37 +361,47 @@ do {
  foreach ($var in $varList) {
   "===============Wait for Azure sync and assign Microsoft licensing=================="
   $userData = Get-Variable -Name $var -ValueOnly
-  Write-Host ( '{0} {1} Phase II' -f $userData.empid , $userData.emailWork )
   $checkUser = $userData | Create-ADUserObject
-  if ($checkUser.LastLogonDate -is [datetime]) {
-   Write-Host ('{0}, LastLogonDate already present. User account exists and is in use. Skipping Phases II & II' -f $checkUser.mail)
+  if ($checkUser.LastLogonDate -isnot [datetime]) {
+   Write-Host ( '{0} {1} Phase II' -f $userData.empid , $userData.emailWork )
+   $script:countThis = 0
+
+   $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork
+   $msolUser = $msolBlock | Get-UserData
+   if (-not($msolUser)) { if (-not($WhatIf)) { continue } }
+   # # Add MS license if needed
+   if ($msolUser.IsLicensed -eq $false ) {
+    $userData | Update-MsolLicense
+    $msolUser = $msolBlock | Get-UserData
+    if ($msolUser.IsLicensed -eq $false) {
+     $errorMsg = '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
+     Write-Error $errorMsg
+     if (-not($WhatIf)) { continue }
+    }
+    else {
+     '{0} {1} Licensing Succeeded.' -f $userData.empid, $userData.emailWork
+    }
+   }
+   $mailBoxBlock = "Get-Mailbox -Identity {0} -ErrorAction SilentlyContinue" -f $userData.emailWork
+   if (-not($mailBoxBlock | Get-UserData)) { if (-not($WhatIf)) { continue } }
+
+   $gsuiteBlock = "(`$guser = .`$gam print users query `"email:{0}`" | ConvertFrom-Csv)*>`$null;`$guser" -f $userData.gsuite
+   $gsuiteData = $gsuiteBlock | Get-UserData
+   if (-not($gsuiteData)) { if (-not($WhatIf)) { continue } } else { Start-Sleep 60; $gsuiteData }
+  }
+  else {
+   Write-Host ('{0}, LastLogonDate already present. User account exists and is in use. Skipping Phases II and III' -f $checkUser.mail)
+   $userData.pw2 = 'Account Already Active. Password Not Changed.'
+   $userData | Update-EscapeEmailWork
+   $userData | Update-IntDBSamAccountName
+   $userData | Update-IntDBTempPw
+   $userData | Update-IntDBSrcSys
+   $userData | Update-IntDBGsuite
+   $userData | Update-IntDBEmailWork
+   '{0} {1} Account creation complete' -f $userData.empid, $userData.emailWork
    continue
   }
 
-  $script:countThis = 0
-
-  $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork
-  $msolUser = $msolBlock | Get-UserData
-  if (-not($msolUser)) { if (-not($WhatIf)) { continue } }
-  # # Add MS license if needed
-  if ($msolUser.IsLicensed -eq $false ) {
-   $userData | Update-MsolLicense
-   $msolUser = $msolBlock | Get-UserData
-   if ($msolUser.IsLicensed -eq $false) {
-    $errorMsg = '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
-    Write-Error $errorMsg
-    if (-not($WhatIf)) { continue }
-   }
-   else {
-    '{0} {1} Licensing Succeeded.' -f $userData.empid, $userData.emailWork
-   }
-  }
-  $mailBoxBlock = "Get-Mailbox -Identity {0} -ErrorAction SilentlyContinue" -f $userData.emailWork
-  if (-not($mailBoxBlock | Get-UserData)) { if (-not($WhatIf)) { continue } }
-
-  $gsuiteBlock = "(`$guser = .`$gam print users query `"email:{0}`" | ConvertFrom-Csv)*>`$null;`$guser" -f $userData.gsuite
-  $gsuiteData = $gsuiteBlock | Get-UserData
-  if (-not($gsuiteData)) { if (-not($WhatIf)) { continue } } else { Start-Sleep 60; $gsuiteData }
 
   Write-Host ( '{0} {1} Phase III' -f $userData.empid , $userData.emailWork )
 

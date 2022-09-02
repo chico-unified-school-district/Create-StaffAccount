@@ -11,6 +11,7 @@ function Create-ADUserObject {
    $securePw = ConvertTo-SecureString -String $_.pw1 -AsPlainText -Force
    $attributes = @{
     Name                  = $_.name
+    DisplayName           = $_.name
     GivenName             = $_.fn
     SurName               = $_.ln
     Title                 = $_.jobType

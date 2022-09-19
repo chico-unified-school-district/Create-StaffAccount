@@ -18,7 +18,7 @@
 [cmdletbinding()]
 param(
  [Alias('DC')]
- [string]$DomainController,
+ [string[]]$DomainControllers,
  [Alias('ADCred')]
  [System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
  [Alias('MSCred')]
@@ -45,20 +45,6 @@ param(
  [Alias('wi')]
  [switch]$WhatIf
 )
-
-
-# Imported Functions
-. .\lib\Create-ADUserObject.ps1
-. .\lib\Create-Name.ps1
-. .\lib\Create-O365PSSession.ps1
-. .\lib\Create-PassPhrase.ps1
-. .\lib\Create-SamID.ps1
-. .\lib\Create-StaffHomeDir.ps1
-. .\lib\Load-Module.ps1
-. .\lib\Show-TestRun.ps1
-
-# Script Functions
-
 function cleanUp {
  Get-Module -name *tmp* | Remove-Module -Confirm:$false -Force
  Get-PSSession | Remove-PSSession -Confirm:$false
@@ -292,6 +278,18 @@ function Update-PW {
 
 # ==================================================================
 
+# Imported Functions
+. .\lib\Create-ADUserObject.ps1
+. .\lib\Create-Name.ps1
+. .\lib\Create-O365PSSession.ps1
+. .\lib\Create-PassPhrase.ps1
+. .\lib\Create-SamID.ps1
+. .\lib\Create-StaffHomeDir.ps1
+. .\lib\Load-Module.ps1
+. .\lib\New-ADSession.ps1
+. .\lib\Select-DomainController.ps1
+. .\lib\Show-TestRun.ps1
+
 $gam = '.\bin\gam-64\gam.exe'
 Write-Host ( 'gam path: {0}' -f $gam )
 $escapeDBParams = @{
@@ -322,8 +320,8 @@ do {
  if ($newAccountData) {
   'MSOnline', 'SqlServer' | Load-Module
 
-  $adSession = New-PSSession -ComputerName $DomainController -Credential $ActiveDirectoryCredential
-  Import-PSSession -Session $adSession -Module ActiveDirectory -AllowClobber | Out-Null
+  $dc = Select-DomainController $DomainControllers
+  New-ADSession -dc $dc -Cred $ActiveDirectoryCredential
 
   Connect-MsolService -Credential $O365Credential -ErrorAction Stop
   Create-O365PSSession -Credential $O365Credential

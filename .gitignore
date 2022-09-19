@@ -17,3 +17,4 @@ bin/gam-64/oauth2.txt
 .vscode/
 notes.txt
 /notes.ps1
+/jenkins.ps1

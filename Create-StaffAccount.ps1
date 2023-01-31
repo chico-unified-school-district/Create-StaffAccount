@@ -281,7 +281,6 @@ function Update-PW {
 # Imported Functions
 . .\lib\Create-ADUserObject.ps1
 . .\lib\Create-Name.ps1
-. .\lib\Create-O365PSSession.ps1
 . .\lib\Create-PassPhrase.ps1
 . .\lib\Create-SamID.ps1
 . .\lib\Create-StaffHomeDir.ps1
@@ -318,13 +317,13 @@ do {
  $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
  $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
  if ($newAccountData) {
-  'MSOnline', 'SqlServer' | Load-Module
+  'MSOnline', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
 
   $dc = Select-DomainController $DomainControllers
   New-ADSession -dc $dc -Cred $ActiveDirectoryCredential
 
   Connect-MsolService -Credential $O365Credential -ErrorAction Stop
-  Create-O365PSSession -Credential $O365Credential
+  Connect-ExchangeOnline -Credential $O365Credential
  }
 
  # Create New User Data Variables

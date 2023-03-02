@@ -115,6 +115,7 @@ function New-UserPropObject {
    name       = $newName
    samid      = $samId
    empid      = $empId
+   bargUnitId = $_.BargUnitId
    emailHome  = $_.emailHome
    emailWork  = $samid + '@chicousd.org'
    gsuite     = $samid + '@chicousd.net'
@@ -256,8 +257,12 @@ function Update-IntDBSrcSys {
 }
 
 function Update-MsolLicense {
- begin { $targetLicense = 'chicousd:STANDARDWOFFPACK_FACULTY' }
+ # begin {
+ #  $targetLicenseStd = 'chicousd:STANDARDWOFFPACK_FACULTY'
+ # }
  process {
+  if ($_.BargUnitId -eq 'CUMA') { $targetLicense = 'chicousd:M365EDU_A5_FACULTY' }
+  else { $targetLicense = 'chicousd:STANDARDWOFFPACK_FACULTY' }
   Write-Host ('[{0}] Assigning Msol Region [US] and License [{1}]' -f $_.emailWork, $targetLicense)
   if (-not$WhatIf) {
    Set-MsolUser -UserPrincipalName $_.emailWork -UsageLocation US -ErrorAction SilentlyContinue

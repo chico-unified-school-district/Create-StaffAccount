@@ -23,6 +23,8 @@ param(
  [System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
  [Alias('MSCred')]
  [System.Management.Automation.PSCredential]$O365Credential,
+ [Alias('MgToken')]
+ [System.Management.Automation.PSCredential]$MGGraphToken,
  [Alias('FSCred')]
  [System.Management.Automation.PSCredential]$FileServerCredential,
  [Alias('ESCServer')]
@@ -211,6 +213,26 @@ function Update-EscapeEmailWork {
  }
 }
 
+function Update-IntDB {
+ begin {
+  $baseSql = "UPDATE {0}
+   SET emailWork = '{1}'
+   SET gsuite = '{2}'
+   SET empId = {3}
+   SET tempPw = '{4}'
+   SET samAccountName = '{5}'
+   SET sourceSystem = '{6}'
+   dts = CURRENT_TIMESTAMP
+  WHERE id = {7};"
+ }
+ process {
+  $updateVars = @($NewAccountsTable, $_.emailWork, $_.gsuite, [long]$_.empid, $_.pw2, $_.samid, $ENV:COMPUTERNAME, $_.id)
+  $sql = $baseSql -f $updateVars
+  Write-Host $sql
+  if (-not$WhatIf) { Invoke-SqlCmd @intermediateDBparams -Query $sql }
+ }
+}
+
 function Update-IntDBEmailWork {
  process {
   $sql = "UPDATE {0} SET emailWork = `'{1}`', dts = CURRENT_TIMESTAMP WHERE id = {2}" -f $NewAccountsTable, $_.emailWork, $_.id
@@ -256,18 +278,36 @@ function Update-IntDBSrcSys {
  }
 }
 
-function Update-MsolLicense {
- # begin {
- #  $targetLicenseStd = 'chicousd:STANDARDWOFFPACK_FACULTY'
- # }
+function Update-AzureLicense {
+ begin {
+  $skuIdA1 = Get-MgSubscribedSku -all | Where-Object skupartnumber -eq 'STANDARDWOFFPACK_FACULTY'
+  $skuIdA5 = Get-MgSubscribedSku -all | Where-Object skupartnumber -eq 'M365EDU_A5_FACULTY'
+ }
  process {
-  if ($_.BargUnitId -eq 'CUMA') { $targetLicense = 'chicousd:M365EDU_A5_FACULTY' }
-  else { $targetLicense = 'chicousd:STANDARDWOFFPACK_FACULTY' }
-  Write-Host ('[{0}] Assigning Msol Region [US] and License [{1}]' -f $_.emailWork, $targetLicense)
-  if (-not$WhatIf) {
-   Set-MsolUser -UserPrincipalName $_.emailWork -UsageLocation US -ErrorAction SilentlyContinue
-   Set-MsolUserLicense -UserPrincipalName $_.emailWork -AddLicenses $targetLicense -ErrorAction SilentlyContinue
+  $sku = if ($_.BargUnitId -eq 'CUMA') { $skuIdA5 } else { $skuIdA1 }
+  Write-Host ('{0},UsageLocation: [US],License: [{1}]' -f $MyInvocation.MyCommand.Name, $sku.SkuPartNumber)
+  # get-mguser -UserId RHammerplamp@chicousd.org -Property UsageLocation | select UsageLocation
+  Update-MgUser -UserId $_.mgUserId -UsageLocation "US"
+  # Add license uses a hash table. Remove uses an array. But why though?!?
+  Set-MgUserLicense -UserId $_.mgUserId -AddLicenses @{ SkuId = $sku.SkuId } -RemoveLicenses @() -WhatIf:$WhatIf
+ }
+}
+
+function Set-ADAttributesForO365 {
+ begin {
+
+ }
+ process {
+  # In Azure, Dynamic Groups are used to assign licenses. We use the local 'extensionAttribute2' for this purpose.
+  $extAtt2 = if ($_.BargUnitId -eq 'CUMA') { 'A1staff' } else { 'A5staff' }
+  $params = @{
+   Identity = $_.samid
+   Add      = @{extensionAttribute2 = $extAtt2 }
+   Confirm  = $false
+   WhatIf   = $WhatIf
   }
+  Write-Host ('{0},extensionAttribute2 = [{1}]' -f $MyInvocation.MyCommand.Name, $extAtt2 )
+  Set-ADUser @params
  }
 }
 
@@ -322,12 +362,14 @@ do {
  $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
  $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
  if ($newAccountData) {
-  'MSOnline', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
+  'Microsoft.Graph', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
+  # 'MSOnline', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
 
   $dc = Select-DomainController $DomainControllers
   New-ADSession -dc $dc -Cred $ActiveDirectoryCredential
 
-  Connect-MsolService -Credential $O365Credential -ErrorAction Stop
+  # Connect-MsolService -Credential $O365Credential -ErrorAction Stop
+  Connect-MgGraph -AccessToken $MGGraphToken
   Connect-ExchangeOnline -Credential $O365Credential
  }
 
@@ -367,15 +409,16 @@ do {
   if ($checkUser.LastLogonDate -isnot [datetime]) {
    Write-Host ( '{0} {1} Phase II' -f $userData.empid , $userData.emailWork )
    $script:countThis = 0
-
-   $msolBlock = "Get-MsolUser -SearchString {0} -All" -f $userData.emailWork
-   $msolUser = $msolBlock | Get-UserData
-   if (-not($msolUser)) { if (-not($WhatIf)) { continue } }
+   # TODO
+   $azureBlock = "Get-MgUser -Filter `"UserPrincipalName eq `'{0}`'`"" -f $userData.emailWork
+   $azureUser = $azureBlock | Get-UserData
+   if (-not($azureUser)) { if (-not($WhatIf)) { continue } }
    # # Add MS license if needed
-   if ($msolUser.IsLicensed -eq $false ) {
-    $userData | Update-MsolLicense
-    $msolUser = $msolBlock | Get-UserData
-    if ($msolUser.IsLicensed -eq $false) {
+   if ($azureUser.IsLicensed -eq $false ) {
+    # TODO
+    $userData | Update-AzureLicense
+    $azureUser = $azureBlock | Get-UserData
+    if ($azureUser.IsLicensed -eq $false) {
      $errorMsg = '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
      Write-Error $errorMsg
      if (-not($WhatIf)) { continue }
@@ -395,6 +438,7 @@ do {
    Write-Host ('{0}, LastLogonDate already present. User account exists and is in use. Skipping Phases II and III' -f $checkUser.mail)
    $userData.pw2 = 'Account Already Active. Password Not Changed.'
    $userData | Update-EscapeEmailWork
+   #TODO Consollidate the IntDB Updates
    $userData | Update-IntDBSamAccountName
    $userData | Update-IntDBTempPw
    $userData | Update-IntDBSrcSys
@@ -403,7 +447,6 @@ do {
    '{0} {1} Account creation complete' -f $userData.empid, $userData.emailWork
    continue
   }
-
 
   Write-Host ( '{0} {1} Phase III' -f $userData.empid , $userData.emailWork )
 

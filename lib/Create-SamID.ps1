@@ -10,7 +10,7 @@ function Create-SamID {
  )
 
  function Format-FirstLetter ($str) {
-  $str.substring(0, 1).ToUpper() + $str.substring(1)
+  if ($str.length -gt 1) { $str.substring(0, 1).ToUpper() + $str.substring(1) }
  }
 
  function makeNameObj ($f, $m, $l) {

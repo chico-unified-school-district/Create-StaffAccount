@@ -23,8 +23,8 @@ param(
  [System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
  [Alias('MSCred')]
  [System.Management.Automation.PSCredential]$O365Credential,
- [Alias('MgToken')]
- [System.Management.Automation.PSCredential]$MGGraphToken,
+ # [Alias('MgToken')]
+ # [System.Management.Automation.PSCredential]$MGGraphToken,
  [Alias('FSCred')]
  [System.Management.Automation.PSCredential]$FileServerCredential,
  [Alias('ESCServer')]
@@ -186,9 +186,14 @@ function Set-Site {
 }
 
 function Update-ADGroupMemberships {
+ begin {
+  $A5 = 'Office365_A5_Faculty' # Microsoft 365 License for admin
+  $A1 = 'Office365_A1_Faculty'
+ }
  process {
+  $azureGroup = if ($_.BargUnitId -eq 'CUMA') { $A5 } else { $A1 }
   # Add user to various groups
-  $groups = 'Staff_Filtering', 'staffroom', 'Employee-Password-Policy'
+  $groups = 'Staff_Filtering', 'staffroom', 'Employee-Password-Policy', $azureGroup
   if ( $_.groups ) { $groups += $_.groups.Split(",") }
   Write-Host ('Adding {0} to {1}' -f $_.samid, ($groups -join ','))
   if ( -not$WhatIf ) { Add-ADPrincipalGroupMembership -Identity $_.samid -MemberOf $groups }
@@ -293,24 +298,6 @@ function Update-AzureLicense {
  }
 }
 
-function Set-ADAttributesForO365 {
- begin {
-
- }
- process {
-  # In Azure, Dynamic Groups are used to assign licenses. We use the local 'extensionAttribute2' for this purpose.
-  $extAtt2 = if ($_.BargUnitId -eq 'CUMA') { 'A1staff' } else { 'A5staff' }
-  $params = @{
-   Identity = $_.samid
-   Add      = @{extensionAttribute2 = $extAtt2 }
-   Confirm  = $false
-   WhatIf   = $WhatIf
-  }
-  Write-Host ('{0},extensionAttribute2 = [{1}]' -f $MyInvocation.MyCommand.Name, $extAtt2 )
-  Set-ADUser @params
- }
-}
-
 function Update-PW {
  process {
   $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
@@ -362,15 +349,13 @@ do {
  $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
  $newAccountData = Invoke-Sqlcmd @intermediateDBparams -Query $newAccountSql
  if ($newAccountData) {
-  'Microsoft.Graph', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
-  # 'MSOnline', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
+  # 'Microsoft.Graph', 'SqlServer', 'ExchangeOnlineManagement' | Load-Module
+  'SqlServer', 'ExchangeOnlineManagement' | Load-Module
 
   $dc = Select-DomainController $DomainControllers
   New-ADSession -dc $dc -Cred $ActiveDirectoryCredential
-
-  # Connect-MsolService -Credential $O365Credential -ErrorAction Stop
-  Connect-MgGraph -AccessToken $MGGraphToken
   Connect-ExchangeOnline -Credential $O365Credential
+  # Connect-MgGraph -AccessToken $MGGraphToken
  }
 
  # Create New User Data Variables
@@ -409,24 +394,7 @@ do {
   if ($checkUser.LastLogonDate -isnot [datetime]) {
    Write-Host ( '{0} {1} Phase II' -f $userData.empid , $userData.emailWork )
    $script:countThis = 0
-   # TODO
-   $azureBlock = "Get-MgUser -Filter `"UserPrincipalName eq `'{0}`'`"" -f $userData.emailWork
-   $azureUser = $azureBlock | Get-UserData
-   if (-not($azureUser)) { if (-not($WhatIf)) { continue } }
-   # # Add MS license if needed
-   if ($azureUser.IsLicensed -eq $false ) {
-    # TODO
-    $userData | Update-AzureLicense
-    $azureUser = $azureBlock | Get-UserData
-    if ($azureUser.IsLicensed -eq $false) {
-     $errorMsg = '{0} {1} Licensing Failed. Skipping' -f $userData.empid, $userData.emailWork
-     Write-Error $errorMsg
-     if (-not($WhatIf)) { continue }
-    }
-    else {
-     '{0} {1} Licensing Succeeded.' -f $userData.empid, $userData.emailWork
-    }
-   }
+
    $mailBoxBlock = "Get-Mailbox -Identity {0} -ErrorAction SilentlyContinue" -f $userData.emailWork
    if (-not($mailBoxBlock | Get-UserData)) { if (-not($WhatIf)) { continue } }
 

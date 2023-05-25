@@ -354,7 +354,7 @@ do {
 
   $dc = Select-DomainController $DomainControllers
   New-ADSession -dc $dc -Cred $ActiveDirectoryCredential
-  Connect-ExchangeOnline -Credential $O365Credential
+  Connect-ExchangeOnline -Credential $O365Credential -ShowBanner:$false
   # Connect-MgGraph -AccessToken $MGGraphToken
  }
 

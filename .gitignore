@@ -18,3 +18,9 @@ bin/gam-64/oauth2.txt
 notes.txt
 /notes.ps1
 /jenkins.ps1
+/params.ps1
+/bin/roots.pem
+/bin/oauth2.txt
+/bin/gam.exe
+/bin/LICENSE
+/bin/noupdatecheck.txt

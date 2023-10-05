@@ -1,11 +1,6 @@
 function New-Name ($first, $middle, $last) {
  begin {
-  # $First + $Middle + $Last
-  function Confirm-FreeName {
-   process {
-    if (-not(Get-ADUser -LDAPFilter "(name=$_)")) { $_ ; return }
-   }
-  }
+  function Confirm-FreeName { process { if (-not(Get-ADUser -LDAPFilter "(name=$_)")) { $_ ; return } } }
   $TextInfo = (Get-Culture).TextInfo
  }
  process {

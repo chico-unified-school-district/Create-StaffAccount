@@ -145,16 +145,17 @@ function Format-UserObject {
     . .\lib\New-Name.ps1
     . .\lib\New-PassPhrase.ps1
     . .\lib\New-SamID.ps1
+    function upper ($str) { $TextInfo = (Get-Culture).TextInfo; $TextInfo.ToTitleCase($str) }
   }
   process {
     $filter = "employeeId -eq '{0}'" -f $_.empId
     # TODO empIds set to an int64 is going away after this
-    if (($_.empId -is [int32]) -or ($_.empID -is [int64])) { $adObj = Get-ADUser -Filter $filter -Properties * }
+    $adObj = if ($_.empId -is [int]) { Get-ADUser -Filter $filter -Properties * }
     $newName = if ($adObj) { $adObj.name } else { New-Name -F $_.nameFirst -M $_.nameMiddle -L $_.nameLast }
     $samId = if ($adObj) { $adObj.samAccountName } else { New-SamID -F $_.nameFirst -M $_.nameMiddle -L $_.nameLast }
     $empId = if ($adObj) { $adObj.employeeId } else { Get-Random -Min 1000000 -Max 10000000 }
+    $fn =
     $siteData = $_ | Set-Site
-    $TextInfo = (Get-Culture).TextInfo
     $psObj = [PSCustomObject]@{
       id         = $_.id
       adObj      = $adObj
@@ -222,7 +223,7 @@ function Update-Groups ($dbParams, $table) {
   }
 }
 
-function Update-EscapeEmailWork ($dbParams, $table) {
+function Update-EmpEmailWork ($dbParams, $table) {
   begin {
     $baseSql = "SELECT empId FROM $table WHERE empID = {0}"
   }
@@ -232,7 +233,7 @@ function Update-EscapeEmailWork ($dbParams, $table) {
     $result = Invoke-Sqlcmd @dbParams -Query $sql
 
     if (-not$result) {
-      Write-Verbose ('{0},User empId not found in Escape,[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samid)
+      Write-Verbose ('{0},[{1}],[{2}],EmpId not found in Database' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samid)
       $_
       return
     }
@@ -329,7 +330,7 @@ do {
   Confirm-NetEmail $intDBparams $NewAccountsTable |
   Update-PW $intDBparams $NewAccountsTable |
   Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
-  Update-EscapeEmailWork $empBParams $EmployeeTable |
+  Update-EmpEmailWork $empBParams $EmployeeTable |
   Update-IntDB $intDBparams $NewAccountsTable |
   Complete-Processing
   Clear-SessionData

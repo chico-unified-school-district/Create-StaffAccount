@@ -11,10 +11,14 @@ $ErrorActionPreference = 'Stop'
 ($user = Get-ADUser -filter "EmployeeID -eq '$EmployeeId'" -Properties SamAccountName, HomePage, departmentNumber)
 $user | Select-Object -Property SamAccountName, HomePage, departmentNumber
 $gam = '.\bin\gam.exe'
+Write-Host ('{0},{1},Removing Gsuite' -f $MyInvocation.MyCommand.Name,$user.Homepage)
 & $gam delete user $user.HomePage
+Write-Host ('{0},{1},Removing AD' -f $MyInvocation.MyCommand.Name,$user.SamAccountName)
 $user | Remove-ADObject
 $lookupTable = Get-Content -Path .\json\site-lookup-table.json | ConvertFrom-Json
+$user.deptartmentNumber
 $siteData = $lookupTable | Where-Object { [int]$_.SiteCode -eq [int]$user.deptartmentNumber[0] }
+Write-Host ('{0},{1},{2},Removing Home Directory' -f $MyInvocation.MyCommand.Name,$user.SamAccountName,$siteData.FileServer)
 . .\lib\Remove-StaffHomeDir.ps1
 Remove-StaffHomeDir -samid $user.SamAccountName -fileserver $siteData.FileServer -cred $FileServerCredential
 

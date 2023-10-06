@@ -1,12 +1,15 @@
 function New-Name ($first, $middle, $last) {
  begin {
   function Confirm-FreeName { process { if (-not(Get-ADUser -LDAPFilter "(name=$_)")) { $_ ; return } } }
-  $TextInfo = (Get-Culture).TextInfo
+  # $TextInfo = (Get-Culture).TextInfo
  }
  process {
-  $fn = $TextInfo.ToTitleCase($first)
-  $mn = $TextInfo.ToTitleCase($middle)
-  $ln = $TextInfo.ToTitleCase($last)
+  $fn = $first
+  $mn = $middle
+  $ln = $last
+  # $fn = $TextInfo.ToTitleCase($first)
+  # $mn = $TextInfo.ToTitleCase($middle)
+  # $ln = $TextInfo.ToTitleCase($last)
   $list = @(
    $fn, $ln -join ' '
    if ($mn.Length -ge 1) { $fn, ($mn.Substring(0, 1) + '.'), $ln -join ' ' }

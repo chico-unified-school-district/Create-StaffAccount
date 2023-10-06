@@ -48,12 +48,13 @@ param(
   [Alias('wi')]
   [switch]$WhatIf
 )
-
+$error.Clear()
+Clear-Host
 function Complete-Processing {
   begin { $i = 0 }
   process {
     if ($_) { $i++ }
-    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samId)
+    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samId) -F DarkBlue
   }
   end {
     if ($i -eq 0 ) { return }
@@ -76,7 +77,7 @@ function Confirm-NetEmail ($dbParams, $table) {
       Write-Verbose ('{0},[{1}],Gsuite User NOT Found' -f $MyInvocation.MyCommand.Name, $_.gsuite)
       return
     }
-    Write-Host ('{0},[{1}],Gsuite User Found' -f $MyInvocation.MyCommand.Name, $_.gsuite)
+    Write-Host ('{0},[{1}],Gsuite User Found' -f $MyInvocation.MyCommand.Name, $_.gsuite) -F Blue
 
     # Update the intDB once the gsuite account is synced to the cloud
     $sql = $baseSql -f $_.gsuite, $_.id
@@ -96,7 +97,7 @@ function Confirm-OrgEmail ($dbParams, $table, $cred) {
     $mailBox = Get-Mailbox -Identity $_.emailWork -ErrorAction SilentlyContinue
     # Update the intDB once the Outlook account is synced to the cloud
     if (-not$mailBox) { return }
-    Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork)
+    Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Blue
     $sql = $baseSql -f $_.emailWork, $_.id
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
     <# Once the intDB has the emailWork entered no more subsequent runs will occur.
@@ -117,7 +118,7 @@ function New-UserADObj ($dbParams, $table) {
     Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.samid)
     $newObj = $_ | New-ADUserObject
     if (-not$newObj) { $_ ; return }
-    Write-Host ('{0},[{1}],AD User Object' -f $MyInvocation.MyCommand.Name, $_.samid)
+    Write-Host ('{0},[{1}],AD User Object' -f $MyInvocation.MyCommand.Name, $_.samid) -F Green
 
     $sql = $baseSql -f $_.samid, $_.empId , $_.id
     Write-Verbose ('{0},Update IntDB: [{1}]' -f $MyInvocation.MyCommand.Name, $sql)
@@ -134,7 +135,7 @@ function New-HomeDir ($dbParams, $table, $cred) {
   process {
     # Skip home folder creation if AD Obj already present
     if ($_.adObj) { $_ ; return }
-    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.samId, $_.fileServer)
+    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.samId, $_.fileServer) -F Green
     $_ | New-StaffHomeDir $cred
     # No need to pass obj down pipe if home dir is new as cloud syncs usually have not occurred yet.
   }
@@ -142,32 +143,38 @@ function New-HomeDir ($dbParams, $table, $cred) {
 
 function Format-UserObject {
   begin {
+    . .\lib\Format-Name.ps1
     . .\lib\New-Name.ps1
     . .\lib\New-PassPhrase.ps1
     . .\lib\New-SamID.ps1
-    function upper ($str) { $TextInfo = (Get-Culture).TextInfo; $TextInfo.ToTitleCase($str) }
   }
   process {
-    $filter = "employeeId -eq '{0}'" -f $_.empId
-    # TODO empIds set to an int64 is going away after this
-    $adObj = if ($_.empId -is [int]) { Get-ADUser -Filter $filter -Properties * }
-    $newName = if ($adObj) { $adObj.name } else { New-Name -F $_.nameFirst -M $_.nameMiddle -L $_.nameLast }
-    $samId = if ($adObj) { $adObj.samAccountName } else { New-SamID -F $_.nameFirst -M $_.nameMiddle -L $_.nameLast }
-    $empId = if ($adObj) { $adObj.employeeId } else { Get-Random -Min 1000000 -Max 10000000 }
-    $fn =
+    # Write-Verbose ($_ | Out-string)
+    Write-Verbose '=================  ======================  =========='
+    $adObj = if ($_.empId -is [int]) {
+      Write-Verbose 'EmpId Detected'
+      $filter = "employeeId -eq '{0}'" -f $_.empId
+      Get-ADUser -Filter $filter -Properties *
+    }
+
+    $empId = if ($adObj) { $adObj.EmployeeID }
+    elseif ($_.empId -is [int]) { $_.empId }
+    else { Get-Random -Min 1000000 -Max 10000000 }
+
+    $fn, $ln, $mn = (Format-Name $_.nameFirst), (Format-Name $_.nameLast), (Format-Name $_.nameMiddle)
+    $newName = if ($adObj) { $adObj.name } else { New-Name -F $fn -M $mn -L $ln }
+    $samId = if ($adObj) { $adObj.samAccountName } else { New-SamID -F $fn -M $mn -L $ln }
     $siteData = $_ | Set-Site
     $psObj = [PSCustomObject]@{
       id         = $_.id
       adObj      = $adObj
       db_gsuite  = $_.gsuite
-      fn         = $TextInfo.ToTitleCase($_.nameFirst)
-      ln         = $TextInfo.ToTitleCase($_.nameLast)
-      mi         = $TextInfo.ToTitleCase($_.nameMiddle)
+      fn         = $fn
+      ln         = $ln
+      mi         = $mn
       name       = $newName
       samid      = $samId
       empId      = $empId
-      bargUnitId = $_.BargUnitId
-      emailHome  = $_.emailHome
       emailWork  = $samid + $Domain1
       gsuite     = $samid + $Domain2
       siteDescr  = $siteData.SiteDescr
@@ -182,7 +189,6 @@ function Format-UserObject {
     }
     Write-Verbose ($psObj | Out-String)
     $psObj
-    $adObj = $null # Clear for next iteration
   }
 }
 
@@ -216,7 +222,7 @@ function Update-Groups ($dbParams, $table) {
     if ( $_.groups ) { $groups += $_.groups.Split(",") }
 
     $msg = $MyInvocation.MyCommand.Name, $_.samid, ($groups -join ',')
-    Write-Host ('{0},[{1}],[{2}]' -f $msg)
+    Write-Host ('{0},[{1}],[{2}]' -f $msg) -F Blue
 
     if ( -not$WhatIf ) { Add-ADPrincipalGroupMembership -Identity $_.samid -MemberOf $groups }
     $_
@@ -239,7 +245,7 @@ function Update-EmpEmailWork ($dbParams, $table) {
     }
 
     $sql = "UPDATE $table SET EmailWork = '{0}' WHERE EmpID = {1}" -f $_.emailWork, $_.empId
-    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
+    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql) -F Magenta
     if (-not$WhatIf) { Invoke-SqlCmd @edbParams -Query $sql }
     $_
   }
@@ -269,7 +275,7 @@ function Update-PW ($dbParams, $table) {
     if ( ($obj.PasswordLastSet - $obj.WhenCreated).TotalMilliseconds -gt 5000 ) { $_ ; return }
     $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
     if (-not$WhatIf) {
-      Write-Host ('{0},CHICO\[{1}]' -f $MyInvocation.MyCommand.Name, $_.samid )
+      Write-Host ('{0},CHICO\[{1}]' -f $MyInvocation.MyCommand.Name, $_.samid ) -F DarkGreen
       <# Once Gsuite account is synced then the password reset is picked up
       via the Gsuite service running on the asscociated Domain Controller
       and this activates the gsuite account #>
@@ -312,6 +318,7 @@ $intDBparams = @{
 $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
 
 $stopTime = if ($WhatIf) { Get-Date } else { Get-Date "11:00pm" }
+#TODO
 $delay = if ($WhatIf ) { 0 } else { 180 }
 
 do {

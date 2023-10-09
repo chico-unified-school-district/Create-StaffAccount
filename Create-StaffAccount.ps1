@@ -62,6 +62,12 @@ function Complete-Processing {
   }
 }
 
+function Convert-RowToPSObj {
+  process {
+    $_ | ConvertTo-Csv | ConvertFrom-Csv
+  }
+}
+
 function Confirm-NetEmail ($dbParams, $table) {
   begin {
     $gam = '.\bin\gam.exe'
@@ -141,6 +147,30 @@ function New-HomeDir ($dbParams, $table, $cred) {
   }
 }
 
+function Set-EmpId {
+  begin {
+  }
+  process {
+    $name = $_.nameLast + ', ' + $_.nameFirst
+    Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.empId, $name)
+
+    $adObj = if ($_.empId -match '\d') {
+      Write-Verbose 'EmpId Pulled from intDB. Checking AD'
+      $filter = "EmployeeID -eq '{0}'" -f $_.empId
+      Get-ADUser -Filter $filter -Properties *
+    }
+
+    $empId = if ($adObj) { $adObj.EmployeeID }
+    elseif ($_.empId -match '\d') { $_.empId }
+    else { Get-Random -Min 1000000 -Max 10000000 }
+
+    $_.empId = $empId
+    $_ | Add-Member -MemberType NoteProperty -Name adObj -Value $adObj
+    $_
+
+  }
+}
+
 function Format-UserObject {
   begin {
     . .\lib\Format-Name.ps1
@@ -150,31 +180,20 @@ function Format-UserObject {
   }
   process {
     # Write-Verbose ($_ | Out-string)
-    Write-Verbose '=================  ======================  =========='
-    $adObj = if ($_.empId -is [int]) {
-      Write-Verbose 'EmpId Detected'
-      $filter = "employeeId -eq '{0}'" -f $_.empId
-      Get-ADUser -Filter $filter -Properties *
-    }
-
-    $empId = if ($adObj) { $adObj.EmployeeID }
-    elseif ($_.empId -is [int]) { $_.empId }
-    else { Get-Random -Min 1000000 -Max 10000000 }
-
     $fn, $ln, $mn = (Format-Name $_.nameFirst), (Format-Name $_.nameLast), (Format-Name $_.nameMiddle)
-    $newName = if ($adObj) { $adObj.name } else { New-Name -F $fn -M $mn -L $ln }
-    $samId = if ($adObj) { $adObj.samAccountName } else { New-SamID -F $fn -M $mn -L $ln }
+    $newName = if ($_.adObj) { $_.adObj.name } else { New-Name -F $fn -M $mn -L $ln }
+    $samId = if ($_.adObj) { $_.adObj.samAccountName } else { New-SamID -F $fn -M $mn -L $ln }
     $siteData = $_ | Set-Site
     $psObj = [PSCustomObject]@{
       id         = $_.id
-      adObj      = $adObj
+      adObj      = $_.adObj
       db_gsuite  = $_.gsuite
       fn         = $fn
       ln         = $ln
       mi         = $mn
       name       = $newName
       samid      = $samId
-      empId      = $empId
+      empId      = $_.empId
       emailWork  = $samid + $Domain1
       gsuite     = $samid + $Domain2
       siteDescr  = $siteData.SiteDescr
@@ -235,7 +254,7 @@ function Update-EmpEmailWork ($dbParams, $table) {
   }
   process {
     $sql = $baseSql -f $_.empId
-    Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
+    # Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
     $result = Invoke-Sqlcmd @dbParams -Query $sql
 
     if (-not$result) {
@@ -322,15 +341,16 @@ $stopTime = if ($WhatIf) { Get-Date } else { Get-Date "11:00pm" }
 $delay = if ($WhatIf ) { 0 } else { 180 }
 
 do {
-  Clear-SessionData
   $objs = Invoke-Sqlcmd @intDBparams -Query $newAccountSql
+
   if ($objs) {
     $dc = Select-DomainController $DomainControllers
     $cmdlets = 'Get-ADUser', 'New-ADuser',
     'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
     New-ADsession -DC $dc -cmdlets $cmdlets -Cred $ActiveDirectoryCredential
   }
-  $objs | Format-UserObject |
+
+  $objs | Convert-RowToPSObj | Set-EmpId | Format-UserObject |
   New-UserADObj $intDBparams $NewAccountsTable |
   Update-Groups $intDBparams $NewAccountsTable |
   New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential |
@@ -338,10 +358,10 @@ do {
   Update-PW $intDBparams $NewAccountsTable |
   Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
   Update-EmpEmailWork $empBParams $EmployeeTable |
-  Update-IntDB $intDBparams $NewAccountsTable |
-  Complete-Processing
-  Clear-SessionData
+  Update-IntDB $intDBparams $NewAccountsTable | Complete-Processing
+
   Write-Verbose "Pausing for $delay seconds before next run..."
+  Clear-SessionData
   Start-Sleep $delay
 } Until ( (Get-Date) -ge $stopTime )
 Show-TestRun

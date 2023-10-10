@@ -54,7 +54,7 @@ function Complete-Processing {
   begin { $i = 0 }
   process {
     if ($_) { $i++ }
-    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samId) -F DarkBlue
+    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
   }
   end {
     if ($i -eq 0 ) { return }
@@ -75,6 +75,7 @@ function Confirm-NetEmail ($dbParams, $table) {
   }
   process {
     if ($_.db_gsuite -eq $_.gsuite) { $_ ; return } # Skip following logic if true
+
     Write-Verbose ('{0},[{1}],Getting Gsuite User' -f $MyInvocation.MyCommand.Name, $_.gsuite)
     $guser = $null
     ($guser = & $gam print users query "email: $($_.gsuite)" | ConvertFrom-CSV)*>$null
@@ -103,12 +104,26 @@ function Confirm-OrgEmail ($dbParams, $table, $cred) {
     $mailBox = Get-Mailbox -Identity $_.emailWork -ErrorAction SilentlyContinue
     # Update the intDB once the Outlook account is synced to the cloud
     if (-not$mailBox) { return }
+
     Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Blue
+
     $sql = $baseSql -f $_.emailWork, $_.id
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
     <# Once the intDB has the emailWork entered no more subsequent runs will occur.
-  The Laserfiche workflow will then handle the next steps #>
+      The Laserfiche workflow will then handle the next steps #>
     if (-not$WhatIf) { Invoke-SqlCmd @dbParams -Query $sql }
+    $_
+  }
+}
+
+function Get-CreationTime {
+  begin {
+  }
+  process {
+    $filter = "EmployeeID -eq '{0}'" -f $_.empId
+    $adObj = Get-ADUser -Filter $filter -Properties WhenCreated
+    $msg = $MyInvocation.MyCommand.Name, $_.info , (((Get-Date) - $adObj.WhenCreated).totalseconds / 60)
+    Write-Host ('{0},[{1}],Creation Time (mins): {2:n2}' -f $msg) -F Cyan
     $_
   }
 }
@@ -121,10 +136,12 @@ function New-UserADObj ($dbParams, $table) {
   process {
     # Skip user new creation if AD Obj already present
     if ($_.adObj) { $_ ; return }
-    Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.samid)
+
+    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Green
+
     $newObj = $_ | New-ADUserObject
+
     if (-not$newObj) { $_ ; return }
-    Write-Host ('{0},[{1}],AD User Object' -f $MyInvocation.MyCommand.Name, $_.samid) -F Green
 
     $sql = $baseSql -f $_.samid, $_.empId , $_.id
     Write-Verbose ('{0},Update IntDB: [{1}]' -f $MyInvocation.MyCommand.Name, $sql)
@@ -205,6 +222,7 @@ function Format-UserObject {
       groups     = $siteData.Groups
       fileServer = $siteData.FileServer
       targetOU   = $TargetOrgUnit
+      info       = $_.empId, $samid, ($fn + ' ' + $ln) -join ','
     }
     Write-Verbose ($psObj | Out-String)
     $psObj
@@ -258,7 +276,7 @@ function Update-EmpEmailWork ($dbParams, $table) {
     $result = Invoke-Sqlcmd @dbParams -Query $sql
 
     if (-not$result) {
-      Write-Verbose ('{0},[{1}],[{2}],EmpId not found in Database' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samid)
+      Write-Verbose ('{0},[{1}],EmpId not found in Database' -f $MyInvocation.MyCommand.Name, $_.info)
       $_
       return
     }
@@ -282,19 +300,19 @@ function Update-IntDB ($dbParams, $table) {
   }
 }
 
-function Update-PW ($dbParams, $table) {
+function Update-ADPW ($dbParams, $table) {
   begin {
     $baseSql = "UPDATE $table SET tempPw = '{0}' WHERE id = {1}"
   }
   process {
-    Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.samid )
+    Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info )
     $obj = Get-ADUser -Identity $_.samid -Properties WhenCreated, PasswordLastSet
     <# PasswordLastSet and WhenCreated differ by less than a second on new accounts.
     5 second threshold used for safety #>
     if ( ($obj.PasswordLastSet - $obj.WhenCreated).TotalMilliseconds -gt 5000 ) { $_ ; return }
     $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
     if (-not$WhatIf) {
-      Write-Host ('{0},CHICO\[{1}]' -f $MyInvocation.MyCommand.Name, $_.samid ) -F DarkGreen
+      Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info ) -F DarkGreen
       <# Once Gsuite account is synced then the password reset is picked up
       via the Gsuite service running on the asscociated Domain Controller
       and this activates the gsuite account #>
@@ -355,10 +373,10 @@ do {
   Update-Groups $intDBparams $NewAccountsTable |
   New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential |
   Confirm-NetEmail $intDBparams $NewAccountsTable |
-  Update-PW $intDBparams $NewAccountsTable |
+  Update-ADPW $intDBparams $NewAccountsTable |
   Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
   Update-EmpEmailWork $empBParams $EmployeeTable |
-  Update-IntDB $intDBparams $NewAccountsTable | Complete-Processing
+  Update-IntDB $intDBparams $NewAccountsTable | Get-CreationTime | Complete-Processing
 
   Write-Verbose "Pausing for $delay seconds before next run..."
   Clear-SessionData

@@ -110,9 +110,12 @@ function Confirm-OrgEmail ($dbParams, $table, $cred) {
     $sql = $baseSql -f $_.emailWork, $_.id
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
     <# Once the intDB has the emailWork entered no more subsequent runs will occur.
-      The Laserfiche workflow will then handle the next steps #>
+      An associated Laserfiche Workflow will then handle the next steps #>
     if (-not$WhatIf) { Invoke-SqlCmd @dbParams -Query $sql }
     $_
+  }
+  end {
+    Disconnect-ExchangeOnline -Confirm:$false
   }
 }
 
@@ -283,7 +286,7 @@ function Update-EmpEmailWork ($dbParams, $table) {
 
     $sql = "UPDATE $table SET EmailWork = '{0}' WHERE EmpID = {1}" -f $_.emailWork, $_.empId
     Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql) -F Magenta
-    if (-not$WhatIf) { Invoke-SqlCmd @edbParams -Query $sql }
+    if (-not$WhatIf) { Invoke-SqlCmd @dbParams -Query $sql }
     $_
   }
 }
@@ -331,14 +334,15 @@ function Update-ADPW ($dbParams, $table) {
 # Imported Functions
 . .\lib\Clear-SessionData.ps1
 . .\lib\New-StaffHomeDir.ps1
-. .\lib\Load-Module.ps1
+# . .\lib\Load-Module.ps1
+. .\lib\Import-SomeModule.ps1
 . .\lib\New-ADSession.ps1
 . .\lib\Select-DomainController.ps1
 . .\lib\Show-TestRun.ps1
 
 Show-TestRun
 
-'SqlServer', 'ExchangeOnlineManagement' | Load-Module
+'SqlServer', 'ExchangeOnlineManagement' | Import-SomeModule
 
 $empBParams = @{
   Server     = $EmployeeServer
@@ -354,10 +358,10 @@ $intDBparams = @{
 
 $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
 
-$stopTime = if ($WhatIf) { Get-Date } else { Get-Date "11:00pm" }
-#TODO
+$stopTime = if ($WhatIf) { Get-Date } else { Get-Date "5:00pm" }
 $delay = if ($WhatIf ) { 0 } else { 180 }
 
+Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, (Get-Date))
 do {
   $objs = Invoke-Sqlcmd @intDBparams -Query $newAccountSql
 

@@ -168,8 +168,6 @@ function New-HomeDir ($dbParams, $table, $cred) {
 }
 
 function Set-EmpId {
-  begin {
-  }
   process {
     $name = $_.nameLast + ', ' + $_.nameFirst
     Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.empId, $name)
@@ -181,13 +179,12 @@ function Set-EmpId {
     }
 
     $empId = if ($adObj) { $adObj.EmployeeID }
-    elseif ($_.empId -match '\d') { $_.empId }
+    elseif ($_.empId -match '\d' -and $_.empId -ne 0) { $_.empId }
     else { Get-Random -Min 1000000 -Max 10000000 }
 
     $_.empId = $empId
     $_ | Add-Member -MemberType NoteProperty -Name adObj -Value $adObj
     $_
-
   }
 }
 

@@ -115,7 +115,7 @@ function Confirm-OrgEmail ($dbParams, $table, $cred) {
     $_
   }
   end {
-    Disconnect-ExchangeOnline -Confirm:$false -ErrorAction
+    Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
   }
 }
 

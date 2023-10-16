@@ -115,7 +115,7 @@ function Confirm-OrgEmail ($dbParams, $table, $cred) {
     $_
   }
   end {
-    Disconnect-ExchangeOnline -Confirm:$false
+    Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
   }
 }
 
@@ -331,7 +331,6 @@ function Update-ADPW ($dbParams, $table) {
 # Imported Functions
 . .\lib\Clear-SessionData.ps1
 . .\lib\New-StaffHomeDir.ps1
-# . .\lib\Load-Module.ps1
 . .\lib\Import-SomeModule.ps1
 . .\lib\New-ADSession.ps1
 . .\lib\Select-DomainController.ps1

@@ -342,15 +342,17 @@ Show-TestRun
 'SqlServer', 'ExchangeOnlineManagement' | Import-SomeModule
 
 $empBParams = @{
-  Server     = $EmployeeServer
-  Database   = $EmployeeDatabase
-  Credential = $EmployeeCredential
+  Server                 = $EmployeeServer
+  Database               = $EmployeeDatabase
+  Credential             = $EmployeeCredential
+  TrustServerCertificate = $true
 }
 
 $intDBparams = @{
-  Server     = $IntermediateSqlServer
-  Database   = $IntermediateDatabase
-  Credential = $IntermediateCredential
+  Server                 = $IntermediateSqlServer
+  Database               = $IntermediateDatabase
+  Credential             = $IntermediateCredential
+  TrustServerCertificate = $true
 }
 
 $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable

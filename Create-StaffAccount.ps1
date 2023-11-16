@@ -54,7 +54,7 @@ function Complete-Processing {
   begin { $i = 0 }
   process {
     if ($_) { $i++ }
-    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+    Write-Host ('{0},[{1}] <{2}' -f $MyInvocation.MyCommand.Name, $_.info, ('=' * (20 - $str.length))) -F Cyan
   }
   end {
     if ($i -eq 0 ) { return }

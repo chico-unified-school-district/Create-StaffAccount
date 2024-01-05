@@ -1,4 +1,4 @@
-function New-StaffHomeDir ($cred) {
+function New-StaffHomeDir ($cred, $full, $readwrite) {
  process {
   $samid = $_.samid
   $fileServer = $_.FileServer
@@ -26,8 +26,8 @@ function New-StaffHomeDir ($cred) {
     # Remove Inheritance and add users and groups
     ICACLS $homePath /inheritance:r /grant "Chico\CreateHomeDir:(OI)(CI)(F)" "BUILTIN\Administrators:(OI)(CI)(F)" | Out-Null
     Start-Sleep 5 # A delay is needed to ensure objects can be mapped to ACLs properly
-    ICACLS $homePath /grant "SYSTEM:(OI)(CI)(F)" "chico\veritas:(OI)(CI)(M)" "Chico\Domain Admins:(OI)(CI)(F)" | Out-Null
-    ICACLS $homePath /grant "Chico\IS-All:(OI)(CI)(M)" | Out-Null
+    ICACLS $homePath /grant "SYSTEM:(OI)(CI)(F)" "${$full}:(OI)(CI)(F)" | Out-Null
+    ICACLS $homePath /grant "${readWrite}:(OI)(CI)(M)" | Out-Null
     ICACLS $homePath /grant "${samid}:(OI)(CI)(RX)" | Out-Null
     ICACLS $docsPath /grant "${samid}:(OI)(CI)(M)" | Out-Null
     $regthis = "($($samid):\(OI\)\(CI\)\(M\))"

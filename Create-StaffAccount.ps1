@@ -28,6 +28,8 @@ param(
   # [System.Management.Automation.PSCredential]$MGGraphToken,
   [Alias('FSCred')]
   [System.Management.Automation.PSCredential]$FileServerCredential,
+  [string]$FullAccess,
+  [string]$ReadWriteAccess,
   [string]$EmployeeServer,
   [string]$EmployeeDatabase,
   [string]$EmployeeTable,
@@ -154,7 +156,7 @@ function New-UserADObj ($dbParams, $table) {
   }
 }
 
-function New-HomeDir ($dbParams, $table, $cred) {
+function New-HomeDir ($dbParams, $table, $cred, $full, $readWrite) {
   begin {
     . .\lib\New-StaffHomeDir.ps1
   }
@@ -162,7 +164,7 @@ function New-HomeDir ($dbParams, $table, $cred) {
     # Skip home folder creation if AD Obj already present
     if ($_.adObj) { $_ ; return }
     Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.samId, $_.fileServer) -F Green
-    $_ | New-StaffHomeDir $cred
+    $_ | New-StaffHomeDir $cred $full $readWrite
     # No need to pass obj down pipe if home dir is new as cloud syncs usually have not occurred yet.
   }
 }
@@ -374,7 +376,7 @@ do {
   $objs | Convert-RowToPSObj | Set-EmpId | Format-UserObject |
   New-UserADObj $intDBparams $NewAccountsTable |
   Update-Groups $intDBparams $NewAccountsTable |
-  New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential |
+  New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess $ReadWriteAccess |
   Confirm-NetEmail $intDBparams $NewAccountsTable |
   Update-ADPW $intDBparams $NewAccountsTable |
   Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |

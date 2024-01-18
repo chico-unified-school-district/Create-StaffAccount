@@ -231,6 +231,18 @@ function Format-UserObject {
   }
 }
 
+function Remove-TmpEXOs {
+  Start-Sleep 10
+  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
+  $cutOff = (Get-Date).AddDays(-1)
+  $myDir = Get-Location
+  Set-Location $ENV:Temp
+  $tmpFolders = Get-ChildItem -Filter tmpEXO* -Recurse -Force
+  $tmpFolders | Where-Object { $_.LastWriteTime -lt $cutOff } |
+  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  Set-Location $myDir
+}
+
 function Set-Site {
   begin {
     $lookupTable = Get-Content -Path .\json\site-lookup-table.json | ConvertFrom-Json
@@ -386,5 +398,6 @@ do {
   Write-Verbose "Pausing for $delay seconds before next run..."
   Clear-SessionData
   Start-Sleep $delay
-} Until ( (Get-Date) -ge $stopTime )
+} Until ( $WhatIf -or ((Get-Date) -ge $stopTime) )
+if (!$WhatIf) { Remove-TmpEXOs }
 Show-TestRun

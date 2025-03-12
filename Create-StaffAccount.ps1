@@ -50,8 +50,6 @@ param(
   [Alias('wi')]
   [switch]$WhatIf
 )
-$error.Clear()
-Clear-Host
 function Complete-Processing {
   begin { $i = 0 }
   process {
@@ -64,16 +62,10 @@ function Complete-Processing {
   }
 }
 
-function Convert-RowToPSObj {
-  process {
-    $_ | ConvertTo-Csv | ConvertFrom-Csv
-  }
-}
-
 function Confirm-NetEmail ($dbParams, $table) {
   begin {
     $gam = '.\bin\gam.exe'
-    $baseSql = "UPDATE $table SET gsuite = '{0}' WHERE id = {1}"
+    $updateSql = "UPDATE $table SET gsuite = @gmail WHERE id = @id"
   }
   process {
     if ($_.db_gsuite -eq $_.gsuite) { $_ ; return } # Skip following logic if true
@@ -89,16 +81,16 @@ function Confirm-NetEmail ($dbParams, $table) {
     Write-Host ('{0},[{1}],Gsuite User Found' -f $MyInvocation.MyCommand.Name, $_.gsuite) -F Blue
 
     # Update the intDB once the gsuite account is synced to the cloud
-    $sql = $baseSql -f $_.gsuite, $_.id
-    Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
-    if (-not$WhatIf) { Invoke-Sqlcmd @dbParams -Query $sql }
+    $sqlVars = "gmail=$($_.gsuite)", "id=$($_.id)"
+    Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
     $_
   }
 }
 
 function Confirm-OrgEmail ($dbParams, $table, $cred) {
   begin {
-    $baseSql = "UPDATE $table SET emailWork = '{0}' WHERE id = {1}"
+    $updateSql = "UPDATE $table SET emailWork = @mail WHERE id = @id"
     Connect-ExchangeOnline -Credential $cred -ShowBanner:$false
   }
   process {
@@ -109,11 +101,11 @@ function Confirm-OrgEmail ($dbParams, $table, $cred) {
 
     Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Blue
 
-    $sql = $baseSql -f $_.emailWork, $_.id
-    Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
+    $sqlVars = "mail=$($_.emailWork)", "id=$($_.id)"
+    Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
     <# Once the intDB has the emailWork entered no more subsequent runs will occur.
       An associated Laserfiche Workflow will then handle the next steps #>
-    if (-not$WhatIf) { Invoke-SqlCmd @dbParams -Query $sql }
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
     $_
   }
   end {
@@ -136,7 +128,7 @@ function Get-CreationTime {
 function New-UserADObj ($dbParams, $table) {
   begin {
     . .\lib\New-ADUserObject.ps1
-    $baseSql = "UPDATE $table SET samAccountName = '{0}', empId = {1} WHERE id = {2};"
+    $updateSql = "UPDATE $table SET samAccountName = @samid, empId = @empId WHERE id = @id;"
   }
   process {
     # Skip user new creation if AD Obj already present
@@ -146,11 +138,11 @@ function New-UserADObj ($dbParams, $table) {
 
     $newObj = $_ | New-ADUserObject
 
-    if (-not$newObj) { $_ ; return }
+    if (-not$newObj) { return $_ }
 
-    $sql = $baseSql -f $_.samid, $_.empId , $_.id
-    Write-Verbose ('{0},Update IntDB: [{1}]' -f $MyInvocation.MyCommand.Name, $sql)
-    if (-not$WhatIf) { Invoke-Sqlcmd @dbParams -Query $sql }
+    $sqlVars = "samid=$($_.samid)", "empId=$($_.empId)" , "id=$($_.id)"
+    Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
 
     $_
   }
@@ -162,7 +154,7 @@ function New-HomeDir ($dbParams, $table, $cred, $full, $readWrite) {
   }
   process {
     # Skip home folder creation if AD Obj already present
-    if ($_.adObj) { $_ ; return }
+    if ($_.adObj) { return $_ }
     Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.samId, $_.fileServer) -F Green
     $_ | New-StaffHomeDir $cred $full $readWrite
     # No need to pass obj down pipe if home dir is new as cloud syncs usually have not occurred yet.
@@ -172,10 +164,10 @@ function New-HomeDir ($dbParams, $table, $cred, $full, $readWrite) {
 function Set-EmpId {
   process {
     $name = $_.nameLast + ', ' + $_.nameFirst
-    Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.empId, $name)
+    Write-Verbose ('{0},EmpId: [{1}],{2}' -f $MyInvocation.MyCommand.Name, $_.empId, $name)
 
     $adObj = if ($_.empId -match '\d') {
-      Write-Verbose 'EmpId Pulled from intDB. Checking AD'
+      Write-Verbose ('{0},EmpId: [{1}],EmpId Pulled from intDB. Checking AD' -f $MyInvocation.MyCommand.Name, $_.empId)
       $filter = "EmployeeID -eq '{0}'" -f $_.empId
       Get-ADUser -Filter $filter -Properties *
     }
@@ -251,10 +243,9 @@ function Set-Site {
     # Skip blank or null site codes
     if (  $_.siteCode -lt 0 ) { return }
     $sc = $_.siteCode
-    Write-Verbose ('{0} {1} {2} {3} Determining site data' -f $_.empId, $_.fn, $_.ln, $sc)
     $siteData = $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
-    if (-not$siteData) { return }
-    Write-Verbose ('{0} {1} {2} {3} {4} Site' -f $_.empId, $_.fn, $_.ln, $sc, $siteData.SiteDescr)
+    if (-not$siteData) { return (Write-Host ('{0},{1},{2},No Site match.' -f $MyInvocation.MyCommand.Name, $_.empId, $sc) -f Magenta) }
+    Write-Verbose ('{0},{1},{2},Site match: {3}' -f $MyInvocation.MyCommand.Name, $_.empId, $sc, $siteData.SiteDescr)
     $siteData
   }
 }
@@ -282,41 +273,36 @@ function Update-Groups ($dbParams, $table) {
 
 function Update-EmpEmailWork ($dbParams, $table) {
   begin {
-    $baseSql = "SELECT empId FROM $table WHERE empID = {0}"
+    $testSql = "SELECT empId FROM $table WHERE empID = @id"
+    $updateSql = "UPDATE $table SET EmailWork = @mail WHERE EmpID = @id"
   }
   process {
-    $sql = $baseSql -f $_.empId
-    # Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
-    $result = Invoke-Sqlcmd @dbParams -Query $sql
-
+    $sqlVars = "id=$($_.empId)"
+    $result = New-SqlOperation @dbParams -Query $testSql -Parameters $sqlVars
     if (-not$result) {
       Write-Verbose ('{0},[{1}],EmpId not found in Database' -f $MyInvocation.MyCommand.Name, $_.info)
-      $_
-      return
+      return $_
     }
-
-    $sql = "UPDATE $table SET EmailWork = '{0}' WHERE EmpID = {1}" -f $_.emailWork, $_.empId
-    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql) -F Magenta
-    if (-not$WhatIf) { Invoke-SqlCmd @dbParams -Query $sql }
+    $sqlVars = "mail=$($_.emailWork)", "id=$($_.empId)"
+    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ',') ) -F Magenta
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $sql -Parameters $sqlVars }
     $_
   }
 }
 
 function Update-IntDB ($dbParams, $table) {
-  begin {
-    $baseSql = "UPDATE $table SET sourceSystem = '{0}', dts = CURRENT_TIMESTAMP WHERE id = {1};"
-  }
+  begin { $updateSql = "UPDATE $table SET sourceSystem = @sys, dts = CURRENT_TIMESTAMP WHERE id = @id;" }
   process {
-    $sql = $baseSql -f $ENV:COMPUTERNAME, $_.id
-    Write-Verbose $sql
-    if (-not$WhatIf) { Invoke-SqlCmd @dbParams -Query $sql }
+    $sqlVars = "sys=$ENV:COMPUTERNAME", "id=$($_.id)"
+    Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
     $_
   }
 }
 
 function Update-ADPW ($dbParams, $table) {
   begin {
-    $baseSql = "UPDATE $table SET tempPw = '{0}' WHERE id = {1}"
+    $updateSql = "UPDATE $table SET tempPw = @pw WHERE id = @id"
   }
   process {
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info )
@@ -332,41 +318,32 @@ function Update-ADPW ($dbParams, $table) {
       and this activates the gsuite account #>
       Set-ADAccountPassword -Identity $_.samid -NewPassword $securePw -Confirm:$false
     }
-    $sql = $baseSql -f $_.pw2, $_.id
-    Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $sql)
+    $sqlVars = "pw=$($_.pw2)", "id=$($_.id)"
+    Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
     # Add pw2 to intDB to allow for
-    if (-not$WhatIf) { Invoke-Sqlcmd @dbParams -Query $sql }
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
     $_
   }
 }
 
-# ==================================================================
+Import-Module ExchangeOnlineManagement, CommonScriptFunctions
 
+Show-BlockInfo Main
 # Imported Functions
-. .\lib\Clear-SessionData.ps1
 . .\lib\New-StaffHomeDir.ps1
-# . .\lib\Load-Module.ps1
-. .\lib\Import-SomeModule.ps1
-. .\lib\New-ADSession.ps1
-. .\lib\Select-DomainController.ps1
-. .\lib\Show-TestRun.ps1
 
 Show-TestRun
 
-'SqlServer', 'ExchangeOnlineManagement' | Import-SomeModule
-
 $empBParams = @{
-  Server                 = $EmployeeServer
-  Database               = $EmployeeDatabase
-  Credential             = $EmployeeCredential
-  TrustServerCertificate = $true
+  Server     = $EmployeeServer
+  Database   = $EmployeeDatabase
+  Credential = $EmployeeCredential
 }
 
 $intDBparams = @{
-  Server                 = $IntermediateSqlServer
-  Database               = $IntermediateDatabase
-  Credential             = $IntermediateCredential
-  TrustServerCertificate = $true
+  Server     = $IntermediateSqlServer
+  Database   = $IntermediateDatabase
+  Credential = $IntermediateCredential
 }
 
 $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
@@ -376,7 +353,7 @@ $delay = if ($WhatIf ) { 0 } else { 180 }
 
 Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, (Get-Date))
 do {
-  $objs = Invoke-Sqlcmd @intDBparams -Query $newAccountSql
+  $objs = New-SqlOperation @intDBparams -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
 
   if ($objs) {
     $dc = Select-DomainController $DomainControllers
@@ -385,7 +362,7 @@ do {
     New-ADsession -DC $dc -cmdlets $cmdlets -Cred $ActiveDirectoryCredential
   }
 
-  $objs | Convert-RowToPSObj | Set-EmpId | Format-UserObject |
+  $objs | Set-EmpId | Format-UserObject |
   New-UserADObj $intDBparams $NewAccountsTable |
   Update-Groups $intDBparams $NewAccountsTable |
   New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess $ReadWriteAccess |

@@ -332,7 +332,7 @@ Show-BlockInfo Main
 # Imported Functions
 . .\lib\New-StaffHomeDir.ps1
 
-Show-TestRun
+if ($WhatIf) { Show-TestRun }
 
 $empBParams = @{
   Server     = $EmployeeServer
@@ -377,4 +377,4 @@ do {
   Start-Sleep $delay
 } Until ( $WhatIf -or ((Get-Date) -ge $stopTime) )
 if (!$WhatIf) { Remove-TmpEXOs }
-Show-TestRun
+if ($WhatIf) { Show-TestRun }

@@ -285,7 +285,7 @@ function Update-EmpEmailWork ($dbParams, $table) {
     }
     $sqlVars = "mail=$($_.emailWork)", "id=$($_.empId)"
     Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ',') ) -F Magenta
-    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $sql -Parameters $sqlVars }
+    if (-not$WhatIf) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
     $_
   }
 }

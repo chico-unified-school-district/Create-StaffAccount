@@ -88,10 +88,27 @@ function Confirm-NetEmail ($dbParams, $table) {
   }
 }
 
-function Confirm-OrgEmail ($dbParams, $table, $cred) {
+function Confirm-OrgEmail ($dbParams, $table, $exchCred) {
   begin {
     $updateSql = "UPDATE $table SET emailWork = @mail WHERE id = @id"
-    Connect-ExchangeOnline -Credential $cred -ShowBanner:$false
+    function New-ExchangeConnection ([int]$attempts, $myCred) {
+      process {
+        try { Connect-ExchangeOnline -Credential $myCred -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable exchStatus }
+        catch {
+          if ($exchStatus -and ($attempts -gt 0)) {
+            $attempts--
+            Write-Host ('{0},Error. Trying again in 30 seconds...,{1} Attempts remaining.' -f $MyInvocation.MyCommand.Name, $attempts) -F Yellow
+            Start-Sleep 30
+            New-ExchangeConnection $attempts $myCred
+          }
+          else {
+            Write-Host ('{0},Failed.' -f $MyInvocation.MyCommand.Name) -F Red
+            Exit
+          }
+        }
+      }
+    }
+    New-ExchangeConnection 10 $exchCred
   }
   process {
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.emailWork)

@@ -28,8 +28,7 @@ param(
   # [System.Management.Automation.PSCredential]$MGGraphToken,
   [Alias('FSCred')]
   [System.Management.Automation.PSCredential]$FileServerCredential,
-  [string]$FullAccess,
-  [string]$ReadWriteAccess,
+  [string[]]$FullAccess,
   [string]$EmployeeServer,
   [string]$EmployeeDatabase,
   [string]$EmployeeTable,
@@ -382,7 +381,7 @@ do {
   $objs | Set-EmpId | Format-UserObject |
   New-UserADObj $intDBparams $NewAccountsTable |
   Update-Groups $intDBparams $NewAccountsTable |
-  New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess $ReadWriteAccess |
+  New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess |
   Confirm-NetEmail $intDBparams $NewAccountsTable |
   Update-ADPW $intDBparams $NewAccountsTable |
   Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |

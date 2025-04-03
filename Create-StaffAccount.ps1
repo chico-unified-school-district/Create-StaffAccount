@@ -92,6 +92,7 @@ function Confirm-OrgEmail ($dbParams, $table, $exchCred) {
     $updateSql = "UPDATE $table SET emailWork = @mail WHERE id = @id"
     function New-ExchangeConnection ([int]$attempts, $myCred) {
       process {
+        $exchStatus = $null
         try { Connect-ExchangeOnline -Credential $myCred -ShowBanner:$false -ErrorAction SilentlyContinue -ErrorVariable exchStatus }
         catch {
           if ($exchStatus -and ($attempts -gt 0)) {
@@ -111,7 +112,7 @@ function Confirm-OrgEmail ($dbParams, $table, $exchCred) {
   }
   process {
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.emailWork)
-    $mailBox = Get-Mailbox -Identity $_.emailWork -ErrorAction SilentlyContinue
+    $mailBox = Get-EXOMailbox -Identity $_.emailWork -ErrorAction SilentlyContinue
     # Update the intDB once the Outlook account is synced to the cloud
     if (-not$mailBox) { return }
 
@@ -154,7 +155,12 @@ function New-UserADObj ($dbParams, $table) {
 
     $newObj = $_ | New-ADUserObject
 
-    if (-not$newObj) { return $_ }
+    $filter = "EmployeeID -eq '{0}'" -f $_.empId
+    $adObj = Get-ADUser -Filter $filter -Properties *
+
+    if ($adObj) { $_.adObj = $adObj }
+
+    if ( !$newObj -or !$adObj) { return }
 
     $sqlVars = "samid=$($_.samid)", "empId=$($_.empId)" , "id=$($_.id)"
     Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
@@ -342,13 +348,16 @@ function Update-ADPW ($dbParams, $table) {
   }
 }
 
-Import-Module ExchangeOnlineManagement, CommonScriptFunctions
+Import-Module -Name ExchangeOnlineManagement -Cmdlet 'Connect-ExchangeOnline', 'Get-EXOMailBox'
+Import-Module -Name dbatools -Cmdlet 'Set-DbatoolsConfig', 'Invoke-DbaQuery'
+Import-Module -Name CommonScriptFunctions
 
 Show-BlockInfo Main
 # Imported Functions
 . .\lib\New-StaffHomeDir.ps1
 
 if ($WhatIf) { Show-TestRun }
+disconnect-ExchangeOnline -Confirm:$false
 
 $empBParams = @{
   Server     = $EmployeeServer
@@ -362,19 +371,18 @@ $intDBparams = @{
   Credential = $IntermediateCredential
 }
 
+$cmdlets = 'Get-ADUser', 'New-ADuser',
+'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
+
 $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
 
 $stopTime = if ($WhatIf) { Get-Date } else { Get-Date "5:00pm" }
 $delay = if ($WhatIf ) { 0 } else { 180 }
 
-Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, (Get-Date))
 do {
   $objs = New-SqlOperation @intDBparams -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
-
   if ($objs) {
     $dc = Select-DomainController $DomainControllers
-    $cmdlets = 'Get-ADUser', 'New-ADuser',
-    'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
     New-ADsession -DC $dc -cmdlets $cmdlets -Cred $ActiveDirectoryCredential
   }
 

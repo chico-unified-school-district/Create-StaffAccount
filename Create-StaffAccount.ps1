@@ -253,7 +253,7 @@ function Remove-TmpEXOs {
   Set-Location $ENV:Temp
   $tmpFolders = Get-ChildItem -Filter tmpEXO* -Recurse -Force
   $tmpFolders | Where-Object { $_.LastWriteTime -lt $cutOff } |
-  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
   Set-Location $myDir
 }
 
@@ -263,9 +263,11 @@ function Set-Site {
   }
   process {
     # Skip blank or null site codes
-    if (  $_.siteCode -lt 0 ) { return }
+    if (($_.siteCode -lt 0) -or ($null -eq $_.siteDescr)) { return }
     $sc = $_.siteCode
-    $siteData = $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
+    $sd = $_.SiteDescr
+    $siteData = if ($sc -match '\d') { $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc } }
+    elseif ($_.siteDescr -match '\w') { $lookupTable | Where-Object { $_.SiteDescr -eq $sd } }
     if (-not$siteData) { return (Write-Host ('{0},{1},{2},No Site match.' -f $MyInvocation.MyCommand.Name, $_.empId, $sc) -f Magenta) }
     Write-Verbose ('{0},{1},{2},Site match: {3}' -f $MyInvocation.MyCommand.Name, $_.empId, $sc, $siteData.SiteDescr)
     $siteData
@@ -386,15 +388,19 @@ do {
     New-ADsession -DC $dc -cmdlets $cmdlets -Cred $ActiveDirectoryCredential
   }
 
-  $objs | Set-EmpId | Format-UserObject |
-  New-UserADObj $intDBparams $NewAccountsTable |
-  Update-Groups $intDBparams $NewAccountsTable |
-  New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess |
-  Confirm-NetEmail $intDBparams $NewAccountsTable |
-  Update-ADPW $intDBparams $NewAccountsTable |
-  Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
-  Update-EmpEmailWork $empBParams $EmployeeTable |
-  Update-IntDB $intDBparams $NewAccountsTable | Get-CreationTime | Complete-Processing
+  $objs
+  Set-EmpId |
+    Format-UserObject |
+      New-UserADObj $intDBparams $NewAccountsTable |
+        Update-Groups $intDBparams $NewAccountsTable |
+          New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess |
+            Confirm-NetEmail $intDBparams $NewAccountsTable |
+              Update-ADPW $intDBparams $NewAccountsTable |
+                # Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
+                Update-EmpEmailWork $empBParams $EmployeeTable |
+                  Update-IntDB $intDBparams $NewAccountsTable |
+                    Get-CreationTime |
+                      Complete-Processing
 
   Write-Verbose "Pausing for $delay seconds before next run..."
   Clear-SessionData

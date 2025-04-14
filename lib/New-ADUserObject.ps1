@@ -1,10 +1,9 @@
 function New-ADUserObject {
  begin {
   Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $_.empId, $_.samid)
-  $shortTermTypes = 'student teacher', 'coach', 'volunteer'
+  $shortTermTypes = 'student teacher', 'coach', 'volunteer', 'student worker'
  }
  process {
-  # $filter = " samAccountName -eq `'{0}`' -or employeeId -eq `'{1}`'" -f $_.samid, $_.empId
   $filter = "employeeId -eq `'{0}`'" -f $_.empId
   $obj = Get-ADUser -Filter $filter -Properties *
   if (-not$obj) {
@@ -30,7 +29,7 @@ function New-ADUserObject {
     CannotChangePassword  = $False
     ChangePasswordAtLogon = $False
     PasswordNotrequired   = $True
-    Whatif                = $WhatIf
+    WhatIf                = $WhatIf
    }
 
    New-ADUser @attributes -ErrorAction Stop | Out-Null
@@ -43,7 +42,7 @@ function New-ADUserObject {
      # Set AccountExpirationDate to after the end of the current school term. ♥
      $year = "{0:yyyy}" -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
      $accountExpirationDate = Get-Date "July 30 $year"
-     '[{0}]Account Expiration set to [{1}]' -f $samid, $accountExpirationDate
+     Write-Host '{0},{1}, Account Expiration set: {1}' -f $MyInvocation.MyCommand.Name, $samid, $accountExpirationDate
      Set-ADUser -Identity $samid -AccountExpirationDate $AccountExpirationDate
     }
 

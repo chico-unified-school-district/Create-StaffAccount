@@ -98,7 +98,7 @@ function Confirm-OrgEmail ($dbParams, $table, $exchCred) {
           if ($exchStatus -and ($attempts -gt 0)) {
             $attempts--
             Write-Host ('{0},Error. Trying again in 30 seconds...,{1} Attempts remaining.' -f $MyInvocation.MyCommand.Name, $attempts) -F Yellow
-            Start-Sleep 30
+            if (!$WhatIf) { Start-Sleep 30 }
             New-ExchangeConnection $attempts $myCred
           }
           else {
@@ -108,7 +108,7 @@ function Confirm-OrgEmail ($dbParams, $table, $exchCred) {
         }
       }
     }
-    New-ExchangeConnection 10 $exchCred
+    if (!$WhatIf) { New-ExchangeConnection 10 $exchCred }
   }
   process {
     Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.emailWork)
@@ -263,11 +263,11 @@ function Set-Site {
   }
   process {
     # Skip blank or null site codes
-    if (($_.siteCode -lt 0) -or ($null -eq $_.siteDescr)) { return }
+    if (  $_.siteCode -lt 0 ) { return }
     $sc = $_.siteCode
-    $sd = $_.SiteDescr
-    $siteData = if ($sc -match '\d') { $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc } }
-    elseif ($_.siteDescr -match '\w') { $lookupTable | Where-Object { $_.SiteDescr -eq $sd } }
+    $sd = $_.siteDescr
+    $siteData = $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
+    $siteData = $lookupTable | Where-Object { $_.siteDescr -eq $sd }
     if (-not$siteData) { return (Write-Host ('{0},{1},{2},No Site match.' -f $MyInvocation.MyCommand.Name, $_.empId, $sc) -f Magenta) }
     Write-Verbose ('{0},{1},{2},Site match: {3}' -f $MyInvocation.MyCommand.Name, $_.empId, $sc, $siteData.SiteDescr)
     $siteData
@@ -359,7 +359,7 @@ Show-BlockInfo Main
 . .\lib\New-StaffHomeDir.ps1
 
 if ($WhatIf) { Show-TestRun }
-disconnect-ExchangeOnline -Confirm:$false
+Disconnect-ExchangeOnline -Confirm:$false
 
 $empBParams = @{
   Server     = $EmployeeServer
@@ -388,19 +388,15 @@ do {
     New-ADsession -DC $dc -cmdlets $cmdlets -Cred $ActiveDirectoryCredential
   }
 
-  $objs
-  Set-EmpId |
-    Format-UserObject |
-      New-UserADObj $intDBparams $NewAccountsTable |
-        Update-Groups $intDBparams $NewAccountsTable |
-          New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess |
-            Confirm-NetEmail $intDBparams $NewAccountsTable |
-              Update-ADPW $intDBparams $NewAccountsTable |
-                # Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
+  $objs | Set-EmpId | Format-UserObject |
+    New-UserADObj $intDBparams $NewAccountsTable |
+      Update-Groups $intDBparams $NewAccountsTable |
+        New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess |
+          Confirm-NetEmail $intDBparams $NewAccountsTable |
+            Update-ADPW $intDBparams $NewAccountsTable |
+              Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
                 Update-EmpEmailWork $empBParams $EmployeeTable |
-                  Update-IntDB $intDBparams $NewAccountsTable |
-                    Get-CreationTime |
-                      Complete-Processing
+                  Update-IntDB $intDBparams $NewAccountsTable | Get-CreationTime | Complete-Processing
 
   Write-Verbose "Pausing for $delay seconds before next run..."
   Clear-SessionData

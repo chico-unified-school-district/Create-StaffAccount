@@ -266,9 +266,11 @@ function Set-Site {
     if (  $_.siteCode -lt 0 ) { return }
     $sc = $_.siteCode
     $sd = $_.siteDescr
+    # Lookup site data by site id
     $siteData = $lookupTable | Where-Object { [int]$_.siteCode -eq [int]$sc }
-    $siteData = $lookupTable | Where-Object { $_.siteDescr -eq $sd }
-    if (-not$siteData) { return (Write-Host ('{0},{1},{2},No Site match.' -f $MyInvocation.MyCommand.Name, $_.empId, $sc) -f Magenta) }
+    # Lookup site data by site description
+    if (!$siteData) { $siteData = $lookupTable | Where-Object { $_.siteDescr -eq $sd } }
+    if (!$siteData) { return (Write-Host ('{0},{1},{2},No Site match.' -f $MyInvocation.MyCommand.Name, $_.empId, $sc) -f Magenta) }
     Write-Verbose ('{0},{1},{2},Site match: {3}' -f $MyInvocation.MyCommand.Name, $_.empId, $sc, $siteData.SiteDescr)
     $siteData
   }

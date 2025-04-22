@@ -14,7 +14,7 @@ function New-ADUserObject {
     GivenName             = $_.fn
     SurName               = $_.ln
     Title                 = $_.jobType
-    Description           = $_.siteDescr + ' ' + $_.jobType
+    Description           = ($_.siteDescr + ' ' + $_.jobType).Trim()
     Office                = $_.siteDescr
     SamAccountName        = $_.samid
     UserPrincipalName     = $_.emailWork

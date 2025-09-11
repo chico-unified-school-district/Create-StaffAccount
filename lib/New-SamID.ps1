@@ -26,7 +26,7 @@ function New-SamID {
    -not( Get-ADUser -LDAPFilter "(proxyaddresses=smtp:$sam@*)" )
   ) { $sam }
  }
- function removeNonLetters ( $str ) { if ($str) { $str -Replace '[^a-zA-Z]' } }
+ function removeNonLetters ( $str ) { if ($str) { $str -replace '[^a-zA-Z]' } }
  function testSams ($nameObj) {
   $possibleNames = @(
    $nameObj.f.Substring(0, 1) + $nameObj.l
@@ -48,6 +48,8 @@ function New-SamID {
    if ($_.length -gt 20) { $_.substring(0, 20) } else { $_ }
   }
  }
+ # ===================================================================
+ Write-Host ('{0},{1},{2},{3}' -f $MyInvocation.MyCommand.Name, $First, $Middle, $Last)
  # process
  $nameObj = makeNameObj -f (Format-FirstLetter $First) -m (Format-FirstLetter $Middle) -l (Format-FirstLetter $Last)
  testSams $nameObj | truncateSam

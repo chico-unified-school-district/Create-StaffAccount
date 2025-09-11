@@ -26,3 +26,4 @@ notes.txt
 /lib/Remove-StaffHomeDir.ps1
 /Remove-TestAccounts.ps1
 /json/site-lookup-table-with-cost-centers.json
+/get-new-accouns.sql

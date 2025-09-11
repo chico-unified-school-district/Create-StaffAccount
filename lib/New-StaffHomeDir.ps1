@@ -1,8 +1,8 @@
 function New-StaffHomeDir ($cred, [string[]]$full) {
  process {
   $samid = $_.samid
-  $fileServer = $_.FileServer
-  iF ( $fileServer -match "[A-Za-z]" ) {
+  $fileServer = $_.site.FileServer
+  if ( $fileServer -match '[A-Za-z]' ) {
    if (-not(Test-Connection -ComputerName $fileServer -Count 2)) {
     Write-Host ('{0},Server not found [{1}]' -f $MyInvocation.MyCommand.Name, $fileServer)
     return
@@ -11,8 +11,8 @@ function New-StaffHomeDir ($cred, [string[]]$full) {
    if ($WhatIf) { return }
    $originalPath = Get-Location
 
-   Write-Verbose "Adding PSDrive"
-   New-PSDrive -name share -Root \\$fileServer\User -PSProvider FileSystem -Credential $cred | Out-Null
+   Write-Verbose 'Adding PSDrive'
+   New-PSDrive -Name share -Root \\$fileServer\User -PSProvider FileSystem -Credential $cred | Out-Null
 
    Set-Location -Path share:
 
@@ -24,12 +24,12 @@ function New-StaffHomeDir ($cred, [string[]]$full) {
     New-Item -Path $docsPath -ItemType Directory -Confirm:$false | Out-Null
 
     # Remove Inheritance and add users and groups
-    ICACLS $homePath /inheritance:d /grant "Chico\CreateHomeDir:(OI)(CI)(F)"
+    ICACLS $homePath /inheritance:d /grant 'Chico\CreateHomeDir:(OI)(CI)(F)' | Out-Null
     Start-Sleep 5 # A delay is needed to ensure objects can be mapped to ACLs properly
-    ICACLS $homePath /grant "SYSTEM:(OI)(CI)(F)" | Out-Null
-    ICACLS $homePath /remove "BUILTIN\Administrators" | Out-Null
-    ICACLS $homePath /remove "BUILTIN\BUILTIN" | Out-Null
-    ICACLS $homePath /remove "CHICO\Administrator" | Out-Null
+    ICACLS $homePath /grant 'SYSTEM:(OI)(CI)(F)' | Out-Null
+    ICACLS $homePath /remove 'BUILTIN\Administrators' | Out-Null
+    ICACLS $homePath /remove 'BUILTIN\BUILTIN' | Out-Null
+    ICACLS $homePath /remove 'CHICO\Administrator' | Out-Null
 
     foreach ($item in $full) {
      Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $homePath, $item) -F Blue
@@ -50,7 +50,7 @@ function New-StaffHomeDir ($cred, [string[]]$full) {
 
    Set-Location $originalPath
 
-   Write-Verbose "Removing PSDrive"
+   Write-Verbose 'Removing PSDrive'
    Remove-PSDrive -Name share -Confirm:$false -Force | Out-Null
   }
  }

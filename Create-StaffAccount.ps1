@@ -140,7 +140,7 @@ function Confirm-GSuite ($dbParams, $table) {
  }
  process {
   if (!$_.new) { return $_ }
-  if ($_.new.gsuite -eq $_.gsuite) { return $_ } # If gsuite already in db then it was synced successfully.
+  if ($_.new.gsuite -eq $_.gsuite) { $_.gsuiteReady = $true ; return $_ } # If gsuite already in db then it was synced successfully.
 
   Write-Verbose ('{0},[{1}],Getting Gsuite User' -f $MyInvocation.MyCommand.Name, $_.gsuite)
   ($guser = & $gam print users query "email: $($_.gsuite)" | ConvertFrom-Csv)*>$null

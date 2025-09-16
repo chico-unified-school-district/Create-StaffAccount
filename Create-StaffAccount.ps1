@@ -176,11 +176,14 @@ function Confirm-OrgEmail ($dbParams, $table, $exchCred) {
   if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return }
   Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Blue
   $_.emailWorkReady = $true
-  $sqlVars = "mail=$($_.emailWork)", "id=$($_.new.id)"
-  Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
   <# Once the intDB has the emailWork entered no more subsequent runs will occur.
-      An associated Laserfiche Workflow will then handle the next steps #>
-  if (!$WhatIf -and $_.gsuiteReady) { New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars }
+  An associated Laserfiche Workflow will then handle the next steps #>
+  if (!$WhatIf -and $_.gsuiteReady) {
+   $sqlVars = "mail=$($_.emailWork)", "id=$($_.new.id)"
+   Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $updateSql, ($sqlVars -join ','))
+   New-SqlOperation @dbParams -Query $updateSql -Parameters $sqlVars
+  }
+  else { Write-Host ('{0},{1},WhatIf or GSuite not ready' -f $MyInvocation.MyCommand.Name, $_.emailWork) }
   $_
  }
 }

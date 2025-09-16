@@ -319,7 +319,7 @@ function Update-IntDB ($dbParams, $table) {
 }
 
 Import-Module -Name ExchangeOnlineManagement -Cmdlet 'Connect-ExchangeOnline', 'Get-EXOMailBox', 'Disconnect-ExchangeOnline'
-Import-Module -Name dbatools -Cmdlet 'Set-DbatoolsConfig', 'Invoke-DbaQuery'
+Import-Module -Name dbatools -Cmdlet 'Set-DbatoolsConfig', 'Invoke-DbaQuery', 'Connect-DbaInstance', 'Disconnect-DbaInstance'
 Import-Module -Name CommonScriptFunctions
 
 Show-BlockInfo Main
@@ -329,17 +329,20 @@ Show-BlockInfo Main
 if ($WhatIf) { Show-TestRun }
 Disconnect-ExchangeOnline -Confirm:$false
 
-$empBParams = @{
+$empSqlParams = @{
  Server     = $EmployeeServer
  Database   = $EmployeeDatabase
  Credential = $EmployeeCredential
 }
 
-$intDBparams = @{
+$intSqlParams = @{
  Server     = $IntermediateSqlServer
  Database   = $IntermediateDatabase
  Credential = $IntermediateCredential
 }
+
+$sisSqlInstance = Connect-DbaInstance @empSqlParams
+$intInstance = Connect-DbaInstance @intSqlParams
 
 $cmdlets = 'Get-ADUser', 'New-ADuser',
 'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
@@ -350,7 +353,7 @@ $stopTime = if ($WhatIf) { Get-Date } else { Get-Date '5:00pm' }
 $delay = if ($WhatIf) { 0 } else { 180 }
 
 do {
- $objs = New-SqlOperation @intDBparams -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
+ $objs = New-SqlOperation @intSqlParams -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
  if ($objs) {
   Connect-ExchangeOnline -Credential $O365Credential -ShowBanner:$false
   Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ActiveDirectoryCredential
@@ -367,15 +370,15 @@ do {
          Add-GSuiteAddress $Domain2 |
           Add-AccountStatus |
            Add-SiteData |
-            New-UserADObj $intDBparams $NewAccountsTable |
+            New-UserADObj $intSqlParams $NewAccountsTable |
              Add-ADData |
-              Update-ADGroups $intDBparams $NewAccountsTable |
-               New-HomeDir $intDBparams $NewAccountsTable $FileServerCredential $FullAccess |
-                Confirm-GSuite $intDBparams $NewAccountsTable |
-                 Update-ADPW $intDBparams $NewAccountsTable |
-                  Confirm-OrgEmail $intDBparams $NewAccountsTable $O365Credential |
-                   Update-EmpEmailWork $empBParams $EmployeeTable |
-                    Update-IntDB $intDBparams $NewAccountsTable |
+              Update-ADGroups $intSqlParams $NewAccountsTable |
+               New-HomeDir $intSqlParams $NewAccountsTable $FileServerCredential $FullAccess |
+                Confirm-GSuite $intSqlParams $NewAccountsTable |
+                 Update-ADPW $intSqlParams $NewAccountsTable |
+                  Confirm-OrgEmail $intSqlParams $NewAccountsTable $O365Credential |
+                   Update-EmpEmailWork $empSqlParams $EmployeeTable |
+                    Update-IntDB $intSqlParams $NewAccountsTable |
                      Complete-Processing
 
  Clear-SessionData

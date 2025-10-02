@@ -386,7 +386,7 @@ $stopTime = if ($WhatIf) { Get-Date } else { Get-Date '5:00pm' }
 $delay = if ($WhatIf) { 0 } else { 180 }
 
 do {
- $newAccounts = New-SqlOperation -Server @intSQLInstance -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
+ $newAccounts = New-SqlOperation @intSQLInstance -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
  if ($newAccounts) {
   Connect-ExchangeOnline -Credential $O365Credential -ShowBanner:$false
   Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ActiveDirectoryCredential

@@ -364,14 +364,14 @@ if ($WhatIf) { Show-TestRun }
 Disconnect-ExchangeOnline -Confirm:$false
 
 $empParams = @{
- SqlInstance   = $EmployeeServer
+ Server        = $EmployeeServer
  Database      = $EmployeeDatabase
  SqlCredential = $EmployeeCredential
 }
 $empSQLInstance = Connect-DbaInstance @empParams
 
 $intParams = @{
- SqlInstance   = $IntermediateSqlServer
+ Server        = $IntermediateSqlServer
  Database      = $IntermediateDatabase
  SqlCredential = $IntermediateCredential
 }

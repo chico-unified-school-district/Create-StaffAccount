@@ -33,7 +33,7 @@ function New-ADUserObject {
 
   Write-Verbose ('{0},Setting Extra User Attributes...' -f $MyInvocation.MyCommand.Name)
   $samid = $_.samid
-  if ( ($_.empid -match '\d{7,}') -or ($shortTermTypes -match $_.jobType) ) {
+  if ( ($_.empid -match '\d{7,}') -or ($shortTermTypes -match $_.new.jobType) ) {
    # ♥ If current month is greater than 6 (June), set AccountExpirationDate to after the end of the current school term. ♥
    $year = '{0:yyyy}' -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
    $accountExpirationDate = Get-Date "July 30 $year"

@@ -363,19 +363,19 @@ $gam = '.\bin\gam.exe'
 if ($WhatIf) { Show-TestRun }
 Disconnect-ExchangeOnline -Confirm:$false
 
-$empParams = @{
- Server        = $EmployeeServer
- Database      = $EmployeeDatabase
- SqlCredential = $EmployeeCredential
+$empSQLInstance = @{
+ Server     = $EmployeeServer
+ Database   = $EmployeeDatabase
+ Credential = $EmployeeCredential
 }
-$empSQLInstance = Connect-DbaInstance @empParams
+# $empSQLInstance = Connect-DbaInstance @empParams
 
-$intParams = @{
- Server        = $IntermediateSqlServer
- Database      = $IntermediateDatabase
- SqlCredential = $IntermediateCredential
+$intSQLInstance = @{
+ Server     = $IntermediateSqlServer
+ Database   = $IntermediateDatabase
+ Credential = $IntermediateCredential
 }
-$intSQLInstance = Connect-DbaInstance @intParams
+# $intSQLInstance = Connect-DbaInstance @intParams
 
 $cmdlets = 'Get-ADUser', 'New-ADuser',
 'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'

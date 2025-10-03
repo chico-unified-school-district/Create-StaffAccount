@@ -217,7 +217,7 @@ function New-HomeDir ($fsUser, $full) {
  }
 }
 
-function New-UserADObj ($dbParams, $table) {
+function New-UserADObj {
  process {
   if ($_.ad) { return $_ }
   Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Green
@@ -281,9 +281,10 @@ function Update-EmpEmailWork ($sqlInstance, $table) {
  }
  process {
   if (!$_.emailWorkReady) { return $_ }
-  $sqlVars = "mail=$($_.emailWork)", "empId=$($_.empId)"
-  Write-Host ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $sql, ($sqlVars -join ',') ) -F Cyan
-  if (!$WhatIf) { New-SqlOperation -Server $sqlInstance -Query $sql -Parameters $sqlVars }
+  $sqlVars = @{mail = $_.emailWork; empId = $_.empId }
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
+
   $_
  }
 }
@@ -295,9 +296,9 @@ function Update-IntDBAddSamAccountName ($sqlInstance, $table) {
    Write-Host ('{0},{1},AD data missing' -f $MyInvocation.MyCommand.Name, $_.info) -f Yellow
    return $_
   }
-  $sqlVars = "samid=$($_.ad.SamAccountName)", "empId=$($_.empId)" , "id=$($_.new.id)"
-  Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $sql, ($sqlVars -join ','))
-  if (!$WhatIf) { New-SqlOperation @sqlInstance -Query $sql -Parameters $sqlVars }
+  $sqlVars = @{samid = $_.ad.SamAccountName; empId = $_.empId; id = $_.new.id }
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
  }
 }
@@ -306,9 +307,9 @@ function Update-IntDBAddGSuite ($sqlInstance, $table) {
  begin { $sql = "UPDATE $table SET gSuite = @gmail WHERE id = @id" }
  process {
   if (!$_.gSuiteReady) { return $_ }
-  $sqlVars = "gmail=$($_.gSuite)", "id=$($_.new.id)"
-  Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $sql, ($sqlVars -join ','))
-  if (!$WhatIf) { New-SqlOperation -Server $sqlInstance -Query $sql -Parameters $sqlVars }
+  $sqlVars = @{gmail = $_.gSuite; id = $_.new.id }
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
  }
 }
@@ -319,9 +320,9 @@ function Update-IntDBEmailWork ($sqlInstance, $table) {
   <# Once the intDB has the emailWork entered no more subsequent runs will occur.
   An associated Laserfiche Workflow will then handle the next steps #>
   if (!$_.gSuiteReady -or !$_.emailWorkReady) { return $_ }
-  $sqlVars = "mail=$($_.emailWork)", "id=$($_.new.id)"
-  Write-Verbose ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $sql, ($sqlVars -join ','))
-  if (!$WhatIf) { New-SqlOperation -Server $sqlInstance -Query $Sql -Parameters $sqlVars }
+  $sqlVars = @{mail = $_.emailWork; id = $_.new.id }
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
  }
 }
@@ -330,9 +331,9 @@ function Update-IntDBTempPw ($sqlInstance, $table) {
  begin { $sql = "UPDATE $table SET tempPw = @pw WHERE id = @id" }
  process {
   if (!$_.pwReset) { return $_ }
-  $sqlVars = "pw=$($_.pw2)", "id=$($_.new.id)"
-  Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $sql, ($sqlVars -join ','))
-  if (!$WhatIf) { New-SqlOperation -Server $sqlInstance -Query $sql -Parameters $sqlVars }
+  $sqlVars = @{pw = $_.pw2; id = $_.new.id }
+  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info)
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
  }
 }
@@ -340,11 +341,18 @@ function Update-IntDBTempPw ($sqlInstance, $table) {
 function Update-IntDB ($sqlInstance, $table) {
  begin { $sql = "UPDATE $table SET sourceSystem = @sys, dts = CURRENT_TIMESTAMP WHERE id = @id;" }
  process {
-  $sqlVars = "sys=$ENV:COMPUTERNAME", "id=$($_.new.id)"
   if ($WhatIf -or !$_.emailWorkReady -or !$_.gSuiteReady) { return $_ }
-  Write-Verbose ('{0},[{1}],[{2}]' -f $MyInvocation.MyCommand.Name, $sql, ($sqlVars -join ','))
-  New-SqlOperation -Server $sqlInstance -Query $sql -Parameters $sqlVars
+  $sqlVars = @{sys = $ENV:COMPUTERNAME; id = $_.new.id }
+  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info)
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
+ }
+}
+
+function Format-SQLParams {
+ process {
+  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
+
  }
 }
 
@@ -363,19 +371,19 @@ $gam = '.\bin\gam.exe'
 if ($WhatIf) { Show-TestRun }
 Disconnect-ExchangeOnline -Confirm:$false
 
-$empSQLInstance = @{
- Server     = $EmployeeServer
- Database   = $EmployeeDatabase
- Credential = $EmployeeCredential
+$empParams = @{
+ SqlInstance   = $EmployeeServer
+ Database      = $EmployeeDatabase
+ SqlCredential = $EmployeeCredential
 }
-# $empSQLInstance = Connect-DbaInstance @empParams
+$empSQLInstance = Connect-DbaInstance @empParams
 
-$intSQLInstance = @{
- Server     = $IntermediateSqlServer
- Database   = $IntermediateDatabase
- Credential = $IntermediateCredential
+$intParams = @{
+ SqlInstance   = $IntermediateSqlServer
+ Database      = $IntermediateDatabase
+ SqlCredential = $IntermediateCredential
 }
-# $intSQLInstance = Connect-DbaInstance @intParams
+$intSQLInstance = Connect-DbaInstance @intParams
 
 $cmdlets = 'Get-ADUser', 'New-ADuser',
 'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
@@ -394,7 +402,7 @@ do {
 
  $newAccounts | Format-UserObject | Add-EmpId | Add-ADData | Add-ADName | Add-ADSamId | Add-Info | Add-O365Address $Domain1 |
   Add-GSuiteAddress $Domain2 | Add-AccountStatus | Add-SiteData |
-   New-UserADObj $NewAccountsTable | Add-ADData |
+   New-UserADObj | Add-ADData |
     Update-IntDBAddSamAccountName $intSQLInstance $NewAccountsTable |
      Update-ADGroups |
       New-HomeDir $FileServerCredential $FullAccess |

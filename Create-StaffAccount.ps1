@@ -140,9 +140,10 @@ function Add-SiteData {
 function Complete-Processing {
  process {
   if (!$_.new) { return $_ }
+  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return }
   Write-Verbose ($MyInvocation.MyCommand.Name, $_ | Out-String)
-  $symbol = if (!$_.gSuiteReady -or !$_.emailWorkReady) { 'x' } else { 'o' }
-  $msg = $MyInvocation.MyCommand.Name, $_.info, (Get-Date -Format G), ($symbol * (20 - $str.length))
+  # $symbol = if (!$_.gSuiteReady -or !$_.emailWorkReady) { 'x' } else { 'o' }
+  $msg = $MyInvocation.MyCommand.Name, $_.info, (Get-Date -Format G), ('+' * (20 - $str.length))
   Write-Host ('{0},[{1}],{2} <{3}' -f $msg) -F Cyan
  }
 }
@@ -290,12 +291,20 @@ function Update-EmpEmailWork ($sqlInstance, $table) {
 }
 
 function Update-IntDBAddSamAccountName ($sqlInstance, $table) {
- begin { $sql = "UPDATE $table SET samAccountName = @samid, empId = @empId WHERE id = @id;" }
+ begin {
+  $sql = "UPDATE $table SET samAccountName = @samid, empId = @empId WHERE id = @id;"
+  $checkSql = "SELECT * FROM $table WHERE samAccountName = @samid AND id = @id;"
+ }
  process {
   if (!$_.ad) {
    Write-Host ('{0},{1},AD data missing' -f $MyInvocation.MyCommand.Name, $_.info) -f Yellow
    return $_
   }
+  # Check for samAccountName
+  $checkVars = @{samid = $_.ad.SamAccountName; id = $_.new.id }
+  $result = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $checkSql -SqlParameters $checkVars
+  if ($result) { return $_ }
+  # Update samAccountName
   $sqlVars = @{samid = $_.ad.SamAccountName; empId = $_.empId; id = $_.new.id }
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }

@@ -264,7 +264,7 @@ function Update-ADGroups {
 function Update-ADPW {
  process {
   Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info )
-  if (!$_.gSuiteReady) { return $_ } # No reason to update unless gSuite exists.
+  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return $_ } # No reason to update unless gSuite exists.
   if (($_.status -eq 'Account Already Exists')) { $_.pw2 = $_.status } else {
    Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info ) -F DarkGreen
    $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force

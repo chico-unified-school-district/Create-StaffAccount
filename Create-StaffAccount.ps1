@@ -285,7 +285,6 @@ function Update-EmpEmailWork ($sqlInstance, $table) {
   $sqlVars = @{mail = $_.emailWork; empId = $_.empId }
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
-
   $_
  }
 }

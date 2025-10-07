@@ -89,20 +89,18 @@ function Add-ADSamId {
 
 function Add-EmpId {
  begin {
-  Write-Verbose ('{0}' -f $MyInvocation.MyCommand.Name)
-  # $adEmpIds = (Get-ADUser -Filter { EmployeeId -like '*' } -Properties EmployeeId).EmployeeId
   function randomEmpId {
-   do { $id = Get-Random -Min 10000000 -Max 99999999; Write-Verbose $id } until
-   ( !(Get-ADUser -Filter " EmployeeId -eq '$id'"))
+   do { $id = Get-Random -Min 10000000 -Max 99999999; Write-Verbose $id }
+   until ( !(Get-ADUser -Filter " EmployeeId -eq '$id'"))
    $id
   }
  }
  process {
-  $_.empId = if ($_.new.empid) { $_.new.empID } else { randomEmpId }
+  $_.empId = if ($_.new.empId -and ($_.new.empId -ne 0)) { $_.new.empId } else { randomEmpId }
   if ($_.empId -lt 1) {
    Write-Host ($_.new | Out-String)
    Write-Error ('{0}, BAD Employee ID' -f $MyInvocation.MyCommand.Name)
-   exit
+   return
   }
   $_
  }
@@ -144,7 +142,7 @@ function Complete-Processing {
   Write-Verbose ($MyInvocation.MyCommand.Name, $_ | Out-String)
   # $symbol = if (!$_.gSuiteReady -or !$_.emailWorkReady) { 'x' } else { 'o' }
   $msg = $MyInvocation.MyCommand.Name, $_.info, (Get-Date -Format G), ('+' * (20 - $str.length))
-  Write-Host ('{0},[{1}],{2} <{3}' -f $msg) -F Cyan
+  Write-Host ('{0},{1},{2} <{3}' -f $msg) -F DarkMagenta
  }
 }
 
@@ -160,7 +158,7 @@ function Confirm-GSuite {
    Write-Verbose ('{0},[{1}],Gsuite User NOT Found.' -f $MyInvocation.MyCommand.Name, $_.gSuite)
    return $_
   }
-  Write-Host ('{0},[{1}],Gsuite User Found.' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Blue
+  Write-Host ('{0},[{1}],Gsuite User Found.' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
   $_.gSuiteReady = $true
   $_
  }
@@ -178,7 +176,7 @@ function Confirm-OrgEmail {
   $mailBox = Get-EXOMailbox @params
   # Stop processing until mailbox exists in the cloud
   if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return $_ }
-  Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Blue
+  Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Green
   $_.emailWorkReady = $true
   $_
  }
@@ -221,7 +219,7 @@ function New-HomeDir ($fsUser, $full) {
 function New-UserADObj {
  process {
   if ($_.ad) { return $_ }
-  Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Green
+  Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Yellow
   $_ | New-ADUserObject
   $_
  }
@@ -254,7 +252,7 @@ function Update-ADGroups {
   if ( $_.site.Groups ) { $groups += $_.site.Groups.Split(',') }
 
   $msg = $MyInvocation.MyCommand.Name, $_.ad.SamAccountName, ($groups -join ',')
-  Write-Host ('{0},[{1}],[{2}]' -f $msg) -F Blue
+  Write-Host ('{0},[{1}],[{2}]' -f $msg) -F Yellow
 
   if ( -not$WhatIf ) { Add-ADPrincipalGroupMembership -Identity $_.ad.ObjectGUID -MemberOf $groups }
   $_
@@ -264,9 +262,9 @@ function Update-ADGroups {
 function Update-ADPW {
  process {
   Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info )
-  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return $_ } # No reason to update unless gSuite exists.
+  if (!$_.gSuiteReady -and !$_.emailWorkReady) { return $_ } # No reason to update unless gSuite exists.
   if (($_.status -eq 'Account Already Exists')) { $_.pw2 = $_.status } else {
-   Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info ) -F DarkGreen
+   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info ) -F Yellow
    $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
    # Updating the password activates the GSuite account
    Set-ADAccountPassword -Identity $_.ad.ObjectGUID -NewPassword $securePw -Confirm:$false -WhatIf:$WhatIf
@@ -278,7 +276,7 @@ function Update-ADPW {
 
 function Update-EmpEmailWork ($sqlInstance, $table) {
  begin {
-  $sql = "UPDATE $table SET EmailWork = @mail WHERE EmpID = @empId"
+  $sql = "UPDATE $table SET EmailWork = @mail WHERE empId = @empId"
  }
  process {
   if (!$_.emailWorkReady) { return $_ }
@@ -289,29 +287,18 @@ function Update-EmpEmailWork ($sqlInstance, $table) {
  }
 }
 
-function Update-IntDBAddSamAccountName ($sqlInstance, $table) {
- begin {
-  $sql = "UPDATE $table SET samAccountName = @samid, empId = @empId WHERE id = @id;"
-  $checkSql = "SELECT * FROM $table WHERE samAccountName = @samid AND id = @id;"
- }
+function Update-IntDB ($sqlInstance, $table) {
+ begin { $sql = "UPDATE $table SET sourceSystem = @sys, dts = CURRENT_TIMESTAMP WHERE id = @id;" }
  process {
-  if (!$_.ad) {
-   Write-Host ('{0},{1},AD data missing' -f $MyInvocation.MyCommand.Name, $_.info) -f Yellow
-   return $_
-  }
-  # Check for samAccountName
-  $checkVars = @{samid = $_.ad.SamAccountName; id = $_.new.id }
-  $result = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $checkSql -SqlParameters $checkVars
-  if ($result) { return $_ }
-  # Update samAccountName
-  $sqlVars = @{samid = $_.ad.SamAccountName; empId = $_.empId; id = $_.new.id }
-  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if ($WhatIf -or !$_.emailWorkReady -or !$_.gSuiteReady) { return $_ }
+  $sqlVars = @{sys = $ENV:COMPUTERNAME; id = $_.new.id }
+  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info)
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
  }
 }
 
-function Update-IntDBAddGSuite ($sqlInstance, $table) {
+function Update-IntDBGSuite ($sqlInstance, $table) {
  begin { $sql = "UPDATE $table SET gSuite = @gmail WHERE id = @id" }
  process {
   if (!$_.gSuiteReady) { return $_ }
@@ -335,32 +322,54 @@ function Update-IntDBEmailWork ($sqlInstance, $table) {
  }
 }
 
+function Update-IntDBEmpId ($sqlInstance, $table) {
+ begin {
+  $sql = "UPDATE $table SET empId = @empId WHERE id = @id;"
+  $checkSql = "SELECT * FROM $table WHERE empId = @empId AND id = @id;"
+ }
+ process {
+  # Check for empId
+  $checkVars = @{empId = $_.empId; id = $_.new.id }
+  $result = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $checkSql -SqlParameters $checkVars
+  if ($result) { return $_ }
+  # Update empId
+  $sqlVars = @{empId = $_.empId; id = $_.new.id }
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
+  $_
+ }
+}
+
+function Update-IntDBSamAccountName ($sqlInstance, $table) {
+ begin {
+  $sql = "UPDATE $table SET samAccountName = @samid WHERE id = @id;"
+  $checkSql = "SELECT * FROM $table WHERE samAccountName = @samid AND id = @id;"
+ }
+ process {
+  if (!$_.ad) {
+   Write-Host ('{0},{1},AD data missing' -f $MyInvocation.MyCommand.Name, $_.info) -f Yellow
+   return $_
+  }
+  # Check for samAccountName
+  $checkVars = @{samid = $_.ad.SamAccountName; id = $_.new.id }
+  $result = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $checkSql -SqlParameters $checkVars
+  if ($result) { return $_ }
+  # Update samAccountName
+  $sqlVars = @{samid = $_.ad.SamAccountName; id = $_.new.id }
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
+  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
+  $_
+ }
+}
+
 function Update-IntDBTempPw ($sqlInstance, $table) {
  begin { $sql = "UPDATE $table SET tempPw = @pw WHERE id = @id" }
  process {
   if (!$_.pwReset) { return $_ }
   $sqlVars = @{pw = $_.pw2; id = $_.new.id }
-  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info)
+  Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $_.pw2) -F Cyan
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
- }
-}
-
-function Update-IntDB ($sqlInstance, $table) {
- begin { $sql = "UPDATE $table SET sourceSystem = @sys, dts = CURRENT_TIMESTAMP WHERE id = @id;" }
- process {
-  if ($WhatIf -or !$_.emailWorkReady -or !$_.gSuiteReady) { return $_ }
-  $sqlVars = @{sys = $ENV:COMPUTERNAME; id = $_.new.id }
-  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info)
-  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
-  $_
- }
-}
-
-function Format-SQLParams {
- process {
-  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
-
  }
 }
 
@@ -402,27 +411,39 @@ $stopTime = if ($WhatIf) { Get-Date } else { Get-Date '5:00pm' }
 $delay = if ($WhatIf) { 0 } else { 180 }
 
 do {
- $newAccounts = Invoke-DbaQuery -SqlInstance $intSQLInstance -Query $newAccountSql | ConvertTo-Csv | ConvertFrom-Csv
+ $newAccounts = Invoke-DbaQuery -SqlInstance $intSQLInstance -Query $newAccountSql |
+  ConvertTo-Csv | ConvertFrom-Csv
  if ($newAccounts) {
   Connect-ExchangeOnline -Credential $O365Credential -ShowBanner:$false
   Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ActiveDirectoryCredential
  }
 
- $newAccounts | Format-UserObject | Add-EmpId | Add-ADData | Add-ADName | Add-ADSamId | Add-Info | Add-O365Address $Domain1 |
-  Add-GSuiteAddress $Domain2 | Add-AccountStatus | Add-SiteData |
-   New-UserADObj | Add-ADData |
-    Update-IntDBAddSamAccountName $intSQLInstance $NewAccountsTable |
-     Update-ADGroups |
-      New-HomeDir $FileServerCredential $FullAccess |
-       Confirm-GSuite |
-        Update-IntDBAddGSuite $intSQLInstance $NewAccountsTable |
-         Update-ADPW |
-          Update-IntDBTempPw $intSQLInstance $NewAccountsTable |
-           Confirm-OrgEmail |
-            Update-IntDBEmailWork $intSQLInstance $NewAccountsTable |
-             Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-              Update-IntDB $intSQLInstance $NewAccountsTable |
-               Complete-Processing
+ $newAccounts |
+  Format-UserObject |
+   Add-EmpId |
+    Add-ADData |
+     Add-ADName |
+      Add-ADSamId |
+       Add-Info |
+        Add-O365Address $Domain1 |
+         Add-GSuiteAddress $Domain2 |
+          Add-AccountStatus |
+           Add-SiteData |
+            New-UserADObj |
+             Add-ADData |
+              Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
+               Update-IntDBSamAccountName $intSQLInstance $NewAccountsTable |
+                Update-ADGroups |
+                 New-HomeDir $FileServerCredential $FullAccess |
+                  Confirm-GSuite |
+                   Update-IntDBGSuite $intSQLInstance $NewAccountsTable |
+                    Update-ADPW |
+                     Update-IntDBTempPw $intSQLInstance $NewAccountsTable |
+                      Confirm-OrgEmail |
+                       Update-IntDBEmailWork $intSQLInstance $NewAccountsTable |
+                        Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                         # Update-IntDB $intSQLInstance $NewAccountsTable |
+                         Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

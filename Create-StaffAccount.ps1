@@ -336,11 +336,11 @@ do {
  $newAccounts |
   Format-Object |
    Add-EmpId |
-    Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
-     Add-ADData |
-      Add-ADName |
-       Add-ADSamId |
-        Add-Info |
+    Add-ADData |
+     Add-ADName |
+      Add-ADSamId |
+       Add-Info |
+        Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
          Add-EmailAddresses $Domain1 $Domain2 |
           Add-AccountStatus |
            Add-SiteData $lookupTable |

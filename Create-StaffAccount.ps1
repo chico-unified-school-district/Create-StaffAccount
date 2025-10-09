@@ -58,7 +58,8 @@ function Add-ADData {
 
 function Add-Info {
  process {
-  $_.info = $_.empId, $_.samid, ($_.fn + ' ' + $_.ln) -join ','
+  # $_.info = $_.empId, $_.samid, ($_.fn + ' ' + $_.ln) -join ','
+  $_.info = '[{0},{1},{2}]' -f $_.empId, $_.samid, ($_.fn + ' ' + $_.ln)
   $_
  }
 }
@@ -87,6 +88,14 @@ function Add-ADSamId {
  }
 }
 
+function Add-EmailAddresses ($dom1, $dom2) {
+ process {
+  $_.emailWork = $_.samid + $dom1
+  $_.gSuite = $_.samid + $dom2
+  $_
+ }
+}
+
 function Add-EmpId {
  begin {
   function randomEmpId {
@@ -96,7 +105,7 @@ function Add-EmpId {
   }
  }
  process {
-  $_.empId = if ($_.new.empId -and ($_.new.empId -ne 0)) { $_.new.empId } else { randomEmpId }
+  $_.empId = if ($_.new.empId -and ($_.new.empId -ne 0)) { $_.new.empId; $_.empIdExists = $true } else { randomEmpId }
   if ($_.empId -lt 1) {
    Write-Host ($_.new | Out-String)
    Write-Error ('{0}, BAD Employee ID' -f $MyInvocation.MyCommand.Name)
@@ -106,31 +115,14 @@ function Add-EmpId {
  }
 }
 
-function Add-GSuiteAddress ($gsuiteDomain) {
- process {
-  $_.gSuite = $_.samId + $gsuiteDomain
-  $_
- }
-}
-
-function Add-O365Address ($o365Domain) {
- process {
-  $_.emailWork = $_.samid + $o365Domain
-  $_
- }
-}
-
-function Add-SiteData {
- begin {
-  $lookupTable = Get-Content -Path .\json\site-lookup-table.json | ConvertFrom-Json
- }
+function Add-SiteData ($tableData) {
  process {
   # Skip blank or null site codes
   $sc = $_.new.siteCode
   $sd = $_.new.siteDescr
-  $_.site = $lookupTable.Where({ [int]$_.SiteCode -eq [int]$sc })
-  if (!$_.site) { $_.site = $lookupTable.Where({ $_.SiteDescr -eq $sd }) }
-  if (!$_.site) { Write-Host ('{0},{1},{2},No Site match.' -f $MyInvocation.MyCommand.Name, $_.empId, $sc) -f Magenta }
+  $_.site = $tableData.Where({ [int]$_.SiteCode -eq [int]$sc })
+  if (!$_.site) { $_.site = $tableData.Where({ $_.SiteDescr -eq $sd }) }
+  if (!$_.site) { Write-Verbose ('{0},{1},No Site match: [{2}]' -f $MyInvocation.MyCommand.Name, $_.info, $sc) }
   $_
  }
 }
@@ -138,9 +130,7 @@ function Add-SiteData {
 function Complete-Processing {
  process {
   if (!$_.new) { return $_ }
-  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return }
-  Write-Verbose ($MyInvocation.MyCommand.Name, $_ | Out-String)
-  # $symbol = if (!$_.gSuiteReady -or !$_.emailWorkReady) { 'x' } else { 'o' }
+  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, ($_ | Out-String))
   $msg = $MyInvocation.MyCommand.Name, $_.info, (Get-Date -Format G), ('+' * (20 - $str.length))
   Write-Host ('{0},{1},{2} <{3}' -f $msg) -F DarkMagenta
  }
@@ -148,17 +138,9 @@ function Complete-Processing {
 
 function Confirm-GSuite {
  process {
-  if (!$_.new) { return $_ }
-  if ($_.new.gSuite -eq $_.gSuite) { $_.gSuiteReady = $true ; return $_ } # If gSuite already in db then it was synced successfully.
-
-  Write-Verbose ('{0},[{1}],Getting Gsuite User...' -f $MyInvocation.MyCommand.Name, $_.gSuite)
   ($gUser = & $gam print users query "email: $($_.gSuite)" | ConvertFrom-Csv)*>$null
-  # Write-Verbose ($MyInvocation.MyCommand.Name, $gUser | Out-String )
-  if ($gUser.PrimaryEmail -ne $_.gSuite) {
-   Write-Verbose ('{0},[{1}],Gsuite User NOT Found.' -f $MyInvocation.MyCommand.Name, $_.gSuite)
-   return $_
-  }
-  Write-Host ('{0},[{1}],Gsuite User Found.' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
+  if ($gUser.PrimaryEmail -ne $_.gSuite) { return }
+  Write-Host ('{0},[{1}],Gsuite User Found!' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
   $_.gSuiteReady = $true
   $_
  }
@@ -166,7 +148,6 @@ function Confirm-GSuite {
 
 function Confirm-OrgEmail {
  process {
-  if (!$_.ad) { return $_ }
   Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.emailWork)
   $upn = $_.ad.UserPrincipalName
   $params = @{
@@ -175,42 +156,44 @@ function Confirm-OrgEmail {
   }
   $mailBox = Get-EXOMailbox @params
   # Stop processing until mailbox exists in the cloud
-  if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return $_ }
+  if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return }
   Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Green
   $_.emailWorkReady = $true
   $_
  }
 }
 
-function Format-UserObject {
+function Format-Object {
  process {
   [PSCustomObject]@{
    ad             = $null
-   new            = $_
-   site           = $null
+   company        = $Organization
    empId          = $_.empId
    fn             = $fn
+   emailWork      = $null
+   emailWorkReady = $null
+   empIdExists    = $null
+   gSuite         = $null
+   gSuiteReady    = $null
+   info           = $null
    ln             = $ln
    mi             = $mn
    name           = $newName
-   samid          = $samId
-   emailWork      = $null
-   emailWorkReady = $null
-   gSuite         = $null
-   gSuiteReady    = $null
-   company        = $Organization
+   new            = $_
    pw1            = New-PassPhrase
    pw2            = New-PassPhrase
    pwReset        = $null
-   targetOU       = $TargetOrgUnit
-   info           = $null
+   samid          = $samId
+   site           = $null
    status         = $null
+   targetOU       = $TargetOrgUnit
   }
  }
 }
 
 function New-HomeDir ($fsUser, $full) {
  process {
+  # Begin Switch to 'New HDrive Location' AD group
   $_ | New-StaffHomeDir $fsUser $full
   $_
  }
@@ -219,9 +202,8 @@ function New-HomeDir ($fsUser, $full) {
 function New-UserADObj {
  process {
   if ($_.ad) { return $_ }
-  Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F Yellow
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Yellow
   $_ | New-ADUserObject
-  $_
  }
 }
 
@@ -243,26 +225,23 @@ function Update-ADGroups {
   $A1 = 'Office365_A1_Faculty' # Microsoft 365 License for general staff
  }
  process {
-  if (!$_.ad) { return $_ }
   if ($_.ad.memberof) { return $_ } # if groups present then, likely already ran
   Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.samid)
-  $licenseGroup = if ($_.BargUnitId -eq 'CUMA') { $A5 } else { $A1 }
+  $licenseGroup = if ($_.emp.BargUnitId -eq 'CUMA') { $A5 } else { $A1 } # HR rarely has this data correct, so A1 is default.
   # Add user to various groups
   $groups = $DefaultStaffGroups + $licenseGroup
   if ( $_.site.Groups ) { $groups += $_.site.Groups.Split(',') }
 
   $msg = $MyInvocation.MyCommand.Name, $_.ad.SamAccountName, ($groups -join ',')
   Write-Host ('{0},[{1}],[{2}]' -f $msg) -F Yellow
-
-  if ( -not$WhatIf ) { Add-ADPrincipalGroupMembership -Identity $_.ad.ObjectGUID -MemberOf $groups }
+  Add-ADPrincipalGroupMembership -Identity $_.ad.ObjectGUID -MemberOf $groups -WhatIf:$WhatIf
   $_
  }
 }
 
 function Update-ADPW {
  process {
-  Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info )
-  if (!$_.gSuiteReady -and !$_.emailWorkReady) { return $_ } # No reason to update unless gSuite exists.
+  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return $_ } # No reason to update yet
   if (($_.status -eq 'Account Already Exists')) { $_.pw2 = $_.status } else {
    Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info ) -F Yellow
    $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
@@ -288,34 +267,18 @@ function Update-EmpEmailWork ($sqlInstance, $table) {
 }
 
 function Update-IntDB ($sqlInstance, $table) {
- begin { $sql = "UPDATE $table SET sourceSystem = @sys, dts = CURRENT_TIMESTAMP WHERE id = @id;" }
- process {
-  if ($WhatIf -or !$_.emailWorkReady -or !$_.gSuiteReady) { return $_ }
-  $sqlVars = @{sys = $ENV:COMPUTERNAME; id = $_.new.id }
-  Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info)
-  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
-  $_
+ begin {
+  $sql = "UPDATE $table SET
+  empId = @empId,
+  samAccountName = @samid,
+  emailWork = @mail,
+  gSuite = @gmail,
+  tempPw = @pw
+  WHERE id = @id;"
  }
-}
-
-function Update-IntDBGSuite ($sqlInstance, $table) {
- begin { $sql = "UPDATE $table SET gSuite = @gmail WHERE id = @id" }
  process {
-  if (!$_.gSuiteReady) { return $_ }
-  $sqlVars = @{gmail = $_.gSuite; id = $_.new.id }
-  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
-  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
-  $_
- }
-}
-
-function Update-IntDBEmailWork ($sqlInstance, $table) {
- begin { $sql = "UPDATE $table SET emailWork = @mail WHERE id = @id" }
- process {
-  <# Once the intDB has the emailWork entered no more subsequent runs will occur.
-  An associated Laserfiche Workflow will then handle the next steps #>
-  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return $_ }
-  $sqlVars = @{mail = $_.emailWork; id = $_.new.id }
+  $sqlVars = @{id = $_.new.id; empId = $_.empId; samid = $_.ad.SamAccountName; mail = $_.emailWork; gmail = $_.gSuite; pw = $_.pw2 }
+  Write-Verbose ('{0},{1},[{2}],[{3}]' -f $MyInvocation.MyCommand.Name, $_.info, $sql, ($sqlVars.Values -join ','))
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
   $_
@@ -323,16 +286,9 @@ function Update-IntDBEmailWork ($sqlInstance, $table) {
 }
 
 function Update-IntDBEmpId ($sqlInstance, $table) {
- begin {
-  $sql = "UPDATE $table SET empId = @empId WHERE id = @id;"
-  $checkSql = "SELECT * FROM $table WHERE empId = @empId AND id = @id;"
- }
+ begin { $sql = "UPDATE $table SET empId = @empId WHERE id = @id;" }
  process {
-  # Check for empId
-  $checkVars = @{empId = $_.empId; id = $_.new.id }
-  $result = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $checkSql -SqlParameters $checkVars
-  if ($result) { return $_ }
-  # Update empId
+  if ($_.empIdExists) { return $_ }
   $sqlVars = @{empId = $_.empId; id = $_.new.id }
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
@@ -340,70 +296,29 @@ function Update-IntDBEmpId ($sqlInstance, $table) {
  }
 }
 
-function Update-IntDBSamAccountName ($sqlInstance, $table) {
- begin {
-  $sql = "UPDATE $table SET samAccountName = @samid WHERE id = @id;"
-  $checkSql = "SELECT * FROM $table WHERE samAccountName = @samid AND id = @id;"
- }
- process {
-  if (!$_.ad) {
-   Write-Host ('{0},{1},AD data missing' -f $MyInvocation.MyCommand.Name, $_.info) -f Yellow
-   return $_
-  }
-  # Check for samAccountName
-  $checkVars = @{samid = $_.ad.SamAccountName; id = $_.new.id }
-  $result = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $checkSql -SqlParameters $checkVars
-  if ($result) { return $_ }
-  # Update samAccountName
-  $sqlVars = @{samid = $_.ad.SamAccountName; id = $_.new.id }
-  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
-  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
-  $_
- }
-}
-
-function Update-IntDBTempPw ($sqlInstance, $table) {
- begin { $sql = "UPDATE $table SET tempPw = @pw WHERE id = @id" }
- process {
-  if (!$_.pwReset) { return $_ }
-  $sqlVars = @{pw = $_.pw2; id = $_.new.id }
-  Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $_.pw2) -F Cyan
-  if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }
-  $_
- }
-}
 
 Import-Module -Name ExchangeOnlineManagement -Cmdlet Connect-ExchangeOnline, Get-EXOMailBox, Disconnect-ExchangeOnline
 Import-Module -Name dbatools -Cmdlet Set-DbatoolsConfig, Invoke-DbaQuery, Connect-DbaInstance, Disconnect-DbaInstance
 Import-Module -Name CommonScriptFunctions -Cmdlet Show-TestRun, New-SqlOperation, Clear-SessionData, New-RandomPassword
 
 Show-BlockInfo Main
+if ($WhatIf) { Show-TestRun }
 
-$gam = '.\bin\gam.exe'
 # Imported Functions
 . .\lib\New-ADUserObject.ps1
 . .\lib\New-PassPhrase.ps1
 . .\lib\New-StaffHomeDir.ps1
 
-if ($WhatIf) { Show-TestRun }
+$gam = '.\bin\gam.exe'
+
 Disconnect-ExchangeOnline -Confirm:$false
 
-$empParams = @{
- SqlInstance   = $EmployeeServer
- Database      = $EmployeeDatabase
- SqlCredential = $EmployeeCredential
-}
-$empSQLInstance = Connect-DbaInstance @empParams
+$empSQLInstance = Connect-DbaInstance -SqlInstance $EmployeeServer -Database $EmployeeDatabase -SqlCredential $EmployeeCredential
+$intSQLInstance = Connect-DbaInstance -SqlInstance $IntermediateSqlServer -Database $IntermediateDatabase -SqlCredential $IntermediateCredential
 
-$intParams = @{
- SqlInstance   = $IntermediateSqlServer
- Database      = $IntermediateDatabase
- SqlCredential = $IntermediateCredential
-}
-$intSQLInstance = Connect-DbaInstance @intParams
+$cmdlets = 'Get-ADUser', 'New-ADuser', 'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
 
-$cmdlets = 'Get-ADUser', 'New-ADuser',
-'Set-ADUser', 'Add-ADPrincipalGroupMembership' , 'Set-ADAccountPassword'
+$lookupTable = Get-Content -Path .\json\site-lookup-table.json | ConvertFrom-Json
 
 $newAccountSql = 'SELECT * FROM {0} WHERE emailWork IS NULL' -f $NewAccountsTable
 
@@ -419,36 +334,31 @@ do {
  }
 
  $newAccounts |
-  Format-UserObject |
+  Format-Object |
    Add-EmpId |
-    Add-ADData |
-     Add-ADName |
-      Add-ADSamId |
-       Add-Info |
-        Add-O365Address $Domain1 |
-         Add-GSuiteAddress $Domain2 |
+    Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
+     Add-ADData |
+      Add-ADName |
+       Add-ADSamId |
+        Add-Info |
+         Add-EmailAddresses $Domain1 $Domain2 |
           Add-AccountStatus |
-           Add-SiteData |
+           Add-SiteData $lookupTable |
             New-UserADObj |
-             Add-ADData |
-              Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
-               Update-IntDBSamAccountName $intSQLInstance $NewAccountsTable |
-                Update-ADGroups |
-                 New-HomeDir $FileServerCredential $FullAccess |
-                  Confirm-GSuite |
-                   Update-IntDBGSuite $intSQLInstance $NewAccountsTable |
-                    Update-ADPW |
-                     Update-IntDBTempPw $intSQLInstance $NewAccountsTable |
-                      Confirm-OrgEmail |
-                       Update-IntDBEmailWork $intSQLInstance $NewAccountsTable |
-                        Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                         # Update-IntDB $intSQLInstance $NewAccountsTable |
-                         Complete-Processing
+             Update-ADGroups |
+              New-HomeDir $FileServerCredential $FullAccess |
+               Confirm-OrgEmail |
+                Confirm-GSuite |
+                 Update-ADPW |
+                  Update-IntDB $intSQLInstance $NewAccountsTable |
+                   Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                    Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
  if (!$WhatIf) { Write-Verbose ('Next Run: {0}' -f ((Get-Date).AddSeconds($delay))) }
  Start-Sleep $delay
 } until ( $WhatIf -or ((Get-Date) -ge $stopTime) )
+
 if (!$WhatIf) { Remove-TmpEXOs }
 if ($WhatIf) { Show-TestRun }

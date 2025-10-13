@@ -107,6 +107,7 @@ function Add-EmpId {
  process {
   $_.empId = if ($_.new.empId -and ($_.new.empId -ne 0)) { $_.new.empId; $_.empIdExists = $true } else { randomEmpId }
   if ($_.empId -lt 1) {
+   # Remove by Feb 2026 if no hits
    Write-Host ($_.new | Out-String)
    Write-Error ('{0}, BAD Employee ID' -f $MyInvocation.MyCommand.Name)
    return
@@ -140,8 +141,7 @@ function Confirm-GSuite {
  process {
   ($gUser = & $gam print users query "email: $($_.gSuite)" | ConvertFrom-Csv)*>$null
   if ($gUser.PrimaryEmail -ne $_.gSuite) { return }
-  Write-Host ('{0},[{1}],Gsuite User Found!' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
-  $_.gSuiteReady = $true
+  Write-Host ('{0},[{1}],Gsuite Found!' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
   $_
  }
 }
@@ -158,7 +158,6 @@ function Confirm-OrgEmail {
   # Stop processing until mailbox exists in the cloud
   if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return }
   Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Green
-  $_.emailWorkReady = $true
   $_
  }
 }
@@ -166,27 +165,25 @@ function Confirm-OrgEmail {
 function Format-Object {
  process {
   [PSCustomObject]@{
-   ad             = $null
-   company        = $Organization
-   empId          = $_.empId
-   fn             = $fn
-   emailWork      = $null
-   emailWorkReady = $null
-   empIdExists    = $null
-   gSuite         = $null
-   gSuiteReady    = $null
-   info           = $null
-   ln             = $ln
-   mi             = $mn
-   name           = $newName
-   new            = $_
-   pw1            = New-PassPhrase
-   pw2            = New-PassPhrase
-   pwReset        = $null
-   samid          = $samId
-   site           = $null
-   status         = $null
-   targetOU       = $TargetOrgUnit
+   ad          = $null
+   company     = $Organization
+   empId       = $_.empId
+   fn          = $fn
+   emailWork   = $null
+   empIdExists = $null
+   gSuite      = $null
+   info        = $null
+   ln          = $ln
+   mi          = $mn
+   name        = $newName
+   new         = $_
+   pw1         = New-PassPhrase
+   pw2         = New-PassPhrase
+   pwReset     = $null
+   samid       = $samId
+   site        = $null
+   status      = $null
+   targetOU    = $TargetOrgUnit
   }
  }
 }
@@ -241,7 +238,6 @@ function Update-ADGroups {
 
 function Update-ADPW {
  process {
-  if (!$_.gSuiteReady -or !$_.emailWorkReady) { return $_ } # No reason to update yet
   if (($_.status -eq 'Account Already Exists')) { $_.pw2 = $_.status } else {
    Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info ) -F Yellow
    $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
@@ -258,7 +254,6 @@ function Update-EmpEmailWork ($sqlInstance, $table) {
   $sql = "UPDATE $table SET EmailWork = @mail WHERE empId = @empId"
  }
  process {
-  if (!$_.emailWorkReady) { return $_ }
   $sqlVars = @{mail = $_.emailWork; empId = $_.empId }
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
   if (!$WhatIf) { Invoke-DbaQuery -SqlInstance $sqlInstance -Query $sql -SqlParameters $sqlVars }

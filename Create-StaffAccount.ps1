@@ -158,6 +158,15 @@ function Confirm-OrgEmail {
   # Stop processing until mailbox exists in the cloud
   if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return }
   Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Green
+  $_.mailbox = $mailBox
+  $_
+ }
+}
+
+function Enable-EmailForwarding {
+ process {
+  Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkYellow
+  $_.mailbox | Set-Mailbox -ForwardingSmtpAddress $_.gSuite -DeliverToMailboxAndForward $true -WhatIf:$WhatIf
   $_
  }
 }
@@ -171,6 +180,7 @@ function Format-Object {
    fn          = $fn
    emailWork   = $null
    empIdExists = $null
+   mailbox     = $null
    gSuite      = $null
    info        = $null
    ln          = $ln
@@ -292,7 +302,7 @@ function Update-IntDBEmpId ($sqlInstance, $table) {
 }
 
 
-Import-Module -Name ExchangeOnlineManagement -Cmdlet Connect-ExchangeOnline, Get-EXOMailBox, Disconnect-ExchangeOnline
+Import-Module -Name ExchangeOnlineManagement -Cmdlet Connect-ExchangeOnline, Get-EXOMailBox, Disconnect-ExchangeOnline, Set-Mailbox
 Import-Module -Name dbatools -Cmdlet Set-DbatoolsConfig, Invoke-DbaQuery, Connect-DbaInstance, Disconnect-DbaInstance
 Import-Module -Name CommonScriptFunctions -Cmdlet Show-TestRun, New-SqlOperation, Clear-SessionData, New-RandomPassword
 
@@ -345,9 +355,10 @@ do {
                Confirm-OrgEmail |
                 Confirm-GSuite |
                  Update-ADPW |
-                  Update-IntDB $intSQLInstance $NewAccountsTable |
-                   Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                    Complete-Processing
+                  Enable-EmailForwarding |
+                   Update-IntDB $intSQLInstance $NewAccountsTable |
+                    Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                     Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

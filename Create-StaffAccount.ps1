@@ -171,6 +171,14 @@ function Enable-EmailForwarding {
  }
 }
 
+function Enable-EmailRetention {
+ process {
+  Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkYellow
+  $_.mailbox | Set-Mailbox -RetainDeletedItemsFor 30 -WhatIf:$WhatIf
+  $_
+ }
+}
+
 function Format-Object {
  process {
   [PSCustomObject]@{
@@ -356,9 +364,10 @@ do {
                 Confirm-GSuite |
                  Update-ADPW |
                   Enable-EmailForwarding |
-                   Update-IntDB $intSQLInstance $NewAccountsTable |
-                    Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                     Complete-Processing
+                   Enable-EmailRetention |
+                    Update-IntDB $intSQLInstance $NewAccountsTable |
+                     Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                      Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

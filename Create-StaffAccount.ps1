@@ -41,7 +41,7 @@ param(
 
 function Add-AccountStatus {
  process {
-  if ( $_.ad -and $_.ad.WhenCreated -lt ((Get-Date).AddDays(-3)) ) {
+  if ( $_.ad -and $_.ad.WhenCreated -lt ((Get-Date).AddDays(-180)) ) {
    $_.status = 'Account Already Exists'
   }
   $_

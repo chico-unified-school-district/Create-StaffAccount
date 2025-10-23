@@ -1,3 +1,24 @@
+<#
+.SYNOPSIS
+Generate a unique SamAccountName candidate from name parts.
+
+.DESCRIPTION
+New-SamID accepts first, middle and last name parts and produces a candidate SAM account name. It tests candidate
+values against AD for existing SamAccountName and proxyaddresses and returns the first available candidate. The
+returned value is truncated to 20 characters to meet AD limits.
+
+.PARAMETER First
+Given (first) name.
+
+.PARAMETER Middle
+Middle name or initial (optional).
+
+.PARAMETER Last
+Family (last) name.
+
+.OUTPUTS
+String - a SAM account name candidate (max 20 characters).
+#>
 function New-SamID {
  [cmdletbinding()]
  param(

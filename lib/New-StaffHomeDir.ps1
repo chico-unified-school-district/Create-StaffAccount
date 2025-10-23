@@ -1,4 +1,37 @@
-function New-StaffHomeDir ($cred, [string[]]$full) {
+<#
+.SYNOPSIS
+Creates a home directory for a user on the target file server and sets ACLs.
+
+.DESCRIPTION
+New-StaffHomeDir mounts the remote file server share, creates a user folder under the share (\<FileServer>\User\<samid>),
+creates a Documents folder, and configures ACLs using ICACLS. It grants full access to the accounts supplied in the
+$full parameter and appropriate rights to the user account.
+
+.PARAMETER cred
+A PSCredential used to create a temporary PSDrive to the remote file server.
+
+.PARAMETER full
+Array of groups or accounts to grant full control on the created home directory.
+
+.INPUTS
+PSCustomObject pipeline input with at least: samid and site.FileServer (the hosting file server name).
+
+.OUTPUTS
+PSCustomObject pipeline input (passed through).
+
+.NOTES
+This function makes use of ICACLS and New-PSDrive which require appropriate privileges. It respects $WhatIf set by the
+calling script and will avoid modifications when that switch is present.
+#>
+function New-StaffHomeDir {
+ [CmdletBinding()]
+ param(
+  [Parameter(Mandatory = $true)]
+  [System.Management.Automation.PSCredential]
+  $cred,
+  [string[]]
+  $full
+ )
  process {
   $samid = $_.samid
   $fileServer = $_.site.FileServer

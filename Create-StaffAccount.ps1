@@ -1,19 +1,133 @@
+[cmdletbinding()]
 <#
- .Synopsis
- This script monitors an external employee database for new entries. when a new entry is detected
- the process performs various activities to prepare an account for use in the organization:
- - Active Directory Account
- - Home Directory
- - Office 365 Account
- - GSuite Account
- .DESCRIPTION
- This process creates accounts and home directories.
- This process is meant to be run every morning and run at intervals until a specified time every evening.
- .EXAMPLE
- .EXAMPLE
- .INPUTS
- .OUTPUTS
- .NOTES
+.SYNOPSIS
+Creates and provisions staff accounts by monitoring an intermediate database table for new employees
+and performing AD, file-server and cloud mailbox related actions.
+
+.DESCRIPTION
+Create-StaffAccount.ps1 polls an intermediate SQL table for new employee rows (rows where EmailWork is NULL). For
+each new employee it will collect and normalize name data, allocate or verify an EmployeeID, generate a SamAccountName
+(SAM ID) and temporary password, create or update an Active Directory user object, create a home directory on the
+appropriate file server, and perform mailbox and forwarding configuration with Exchange Online and GSuite (via GAM).
+
+This script is designed to be run periodically (for example once each morning and then at intervals throughout the
+day until a configured stop time). It supports a -WhatIf switch to preview actions without making changes.
+
+.PARAMETER DomainControllers
+An array of Active Directory Domain Controller hostnames to use when connecting to AD. Passed through to
+Connect-ADSession / AD cmdlets.
+
+.PARAMETER ActiveDirectoryCredential
+A PSCredential object used to authenticate to Active Directory when creating or updating user objects.
+
+.PARAMETER DefaultStaffGroups
+An array of AD group names that new staff accounts should be added to by default. The script will also add licensing
+groups based on HR fields and site-specific groups from the lookup table.
+
+.PARAMETER O365Credential
+A PSCredential used to connect to ExchangeOnline (Connect-ExchangeOnline) to manage mailboxes and retention/forwarding.
+
+.PARAMETER FileServerCredential
+Credentials used when creating home directories on remote file servers (New-StaffHomeDir uses these credentials).
+
+.PARAMETER FullAccess
+Array of group or user identifiers that should receive full access ACLs on newly created home directories.
+
+.PARAMETER EmployeeServer
+The SQL Server (instance name/address) hosting the authoritative employee database.
+
+.PARAMETER EmployeeDatabase
+The database name on the EmployeeServer that contains the authoritative data.
+
+.PARAMETER EmployeeTable
+The table name in the employee database containing employee rows (not frequently used directly — connection helper uses
+these values to read authoritative data if necessary).
+
+.PARAMETER EmployeeCredential
+PSCredential used to authenticate to the EmployeeServer when querying employee data.
+
+.PARAMETER IntermediateSqlServer
+The SQL Server instance that contains the intermediate table the script watches for new accounts.
+
+.PARAMETER IntermediateDatabase
+The database on the intermediate SQL server that holds the new-accounts table.
+
+.PARAMETER NewAccountsTable
+The table (in the intermediate DB) to query for rows needing provisioning. The script expects the table to contain a
+row per person and columns such as id, nameFirst, nameLast, nameMiddle, siteCode, jobType, empId, emailWork and tempPw.
+
+.PARAMETER IntermediateCredential
+PSCredential used to authenticate to the intermediate SQL instance when reading and updating the new-accounts table.
+
+.PARAMETER TargetOrgUnit
+The distinguished name (AD path) of the target OU where new user objects should be created if the script creates users.
+
+.PARAMETER Organization
+String used to populate the Company attribute on AD objects.
+
+.PARAMETER Domain1
+Primary domain suffix used to form the organizational email address (example: '@chicousd.org').
+
+.PARAMETER Domain2
+Secondary domain suffix used to form the GSuite address (example: '@chicousd.net').
+
+.PARAMETER WhatIf
+Switch that enables a dry-run mode; when supplied the script will display planned actions but will not perform
+changes that modify AD, SQL, Exchange Online, or the file server. Many internal calls pass -WhatIf to cmdlets when this
+switch is set.
+
+.EXAMPLE
+.
+PS> .\Create-StaffAccount.ps1 -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01','dc02' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -FileServerCredential (Get-Credential)
+
+Runs in normal (non-WhatIf) mode and will attempt to provision any rows returned by the intermediate query.
+
+.EXAMPLE
+# Dry-run: preview changes without making modifications to AD, Exchange or file servers
+PS> .\Create-StaffAccount.ps1 -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -FileServerCredential (Get-Credential) -WhatIf
+
+.EXAMPLE
+# Scheduled/CI invocation example (PowerShell scheduled task or Jenkins):
+PS> powershell -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\Create-StaffAccount.ps1" -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -FileServerCredential (Get-Credential)
+
+.NOTES
+- The script requires the following modules to be available: ExchangeOnlineManagement, dbatools, CommonScriptFunctions.
+- External helper scripts in the `lib\` directory are used. Minimal reference docs for those functions are included
+    below so an operator can understand their contract without opening each file.
+- The script optionally invokes `gam.exe` to query or manage GSuite accounts. Ensure `bin\gam.exe` is valid and
+    configured if GSuite actions are required.
+
+.EXTERNAL FUNCTION REFERENCE
+Below are short, comment-style contracts for external functions called by this script. These are intended as a quick
+reference and are not substitutes for the implementations in `lib\`.
+
+New-ADUserObject
+ - Inputs (via pipeline): a PSCustomObject with properties: name, fn, ln, mi, new (original row), samid, empid, emailWork,
+     pw1 (plain-text temporary password), targetOU, company, site (site metadata), new.siteCode, new.jobType and WhatIf uses.
+ - Output: Outputs the same pipeline object with AD object created; may write verbose/info messages.
+ - Side effects: Creates AD user (New-ADUser) and updates attributes such as proxyAddresses, targetAddress and optionally
+     AccountExpirationDate and middleName.
+
+New-StaffHomeDir
+ - Parameters: ($cred, [string[]]$full) where $cred is PSCredential used to mount a remote share and $full is an array
+     of groups/users to grant ACLs to.
+ - Inputs (via pipeline): a PSCustomObject including samid and site.FileServer where home directories should be created.
+ - Behavior: Creates a directory \<FileServer>\User\<samid>\Documents, sets ACLs with ICACLS and grants access to the
+     supplied $full accounts and the user.
+
+New-PassPhrase
+ - No parameters. Returns a string: a generated passphrase used as a temporary password (13-16 chars) composed from
+     dictionaries under `lib\`.
+
+New-SamID
+ - Parameters: -First <string> -Middle <string> -Last <string>
+ - Returns: a candidate SamAccountName string generated from name parts. Respects AD uniqueness by checking for existing
+     SAMs and proxyaddresses.
+
+Format-Name
+ - Parameters: <string>
+ - Returns: a normalized, title-cased name string with limited allowed characters (letters, apostrophe and spaces).
+
 #>
 [cmdletbinding()]
 param(

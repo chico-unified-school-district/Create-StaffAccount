@@ -320,13 +320,13 @@ function Format-Object {
  }
 }
 
-function New-HomeDir ($fsUser, $full) {
- process {
-  # Begin Switch to 'New HDrive Location' AD group
-  $_ | New-StaffHomeDir $fsUser $full
-  $_
- }
-}
+# function New-HomeDir ($fsUser, $full) {
+#  process {
+#   # Begin Switch to 'New HDrive Location' AD group
+#   $_ | New-StaffHomeDir $fsUser $full
+#   $_
+#  }
+# }
 
 function New-UserADObj {
  process {
@@ -434,7 +434,7 @@ if ($WhatIf) { Show-TestRun }
 # Imported Functions
 . .\lib\New-ADUserObject.ps1
 . .\lib\New-PassPhrase.ps1
-. .\lib\New-StaffHomeDir.ps1
+# . .\lib\New-StaffHomeDir.ps1
 
 $gam = '.\bin\gam.exe'
 
@@ -473,15 +473,15 @@ do {
            Add-SiteData $lookupTable |
             New-UserADObj |
              Update-ADGroups |
-              New-HomeDir $FileServerCredential $FullAccess |
-               Confirm-OrgEmail |
-                Confirm-GSuite |
-                 Update-ADPW |
-                  Enable-EmailForwarding |
-                   Enable-EmailRetention |
-                    Update-IntDB $intSQLInstance $NewAccountsTable |
-                     Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                      Complete-Processing
+              # New-HomeDir $FileServerCredential $FullAccess |
+              Confirm-OrgEmail |
+               Confirm-GSuite |
+                Update-ADPW |
+                 Enable-EmailForwarding |
+                  Enable-EmailRetention |
+                   Update-IntDB $intSQLInstance $NewAccountsTable |
+                    Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                     Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

@@ -422,8 +422,7 @@ function Update-IntDBEmpId ($sqlInstance, $table) {
   $_
  }
 }
-
-
+# ===================================================== main =====================================================
 Import-Module -Name ExchangeOnlineManagement -Cmdlet Connect-ExchangeOnline, Get-EXOMailBox, Disconnect-ExchangeOnline, Set-Mailbox
 Import-Module -Name dbatools -Cmdlet Set-DbatoolsConfig, Invoke-DbaQuery, Connect-DbaInstance, Disconnect-DbaInstance
 Import-Module -Name CommonScriptFunctions -Cmdlet Show-TestRun, New-SqlOperation, Clear-SessionData, New-RandomPassword
@@ -436,7 +435,7 @@ if ($WhatIf) { Show-TestRun }
 . .\lib\New-PassPhrase.ps1
 # . .\lib\New-StaffHomeDir.ps1
 
-$gam = '.\bin\gam.exe'
+$gam = 'C:\GAM7\gam.exe'
 
 Disconnect-ExchangeOnline -Confirm:$false
 

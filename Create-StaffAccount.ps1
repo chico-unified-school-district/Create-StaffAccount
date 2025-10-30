@@ -253,7 +253,9 @@ function Complete-Processing {
 
 function Confirm-GSuite {
  process {
+  $ErrorActionPreference = 'Continue'
   ($gUser = & $gam print users query "email: $($_.gSuite)" | ConvertFrom-Csv)*>$null
+  $ErrorActionPreference = 'Stop'
   if ($gUser.PrimaryEmail -ne $_.gSuite) { return }
   Write-Host ('{0},[{1}],Gsuite Found!' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
   $_

@@ -279,6 +279,24 @@ function Confirm-OrgEmail {
  }
 }
 
+function Convert-FromSharedMailbox {
+ process {
+  $msgData = $MyInvocation.MyCommand.Name, $_.ad.EmployeeID, $_.ad.Mail
+  $params = @{
+   Filter = "UserPrincipalName -eq '{0}'" -f $_.ad.UserPrincipalName
+  }
+  if ((Get-Mailbox @params).IsShared -ne $true) { return $_ } # Shared already False
+  Set-Mailbox -Identity $_.ad.UserPrincipalName -Type Regular -WhatIf:$WhatIf # Convert to Shared Mailbox
+  if (!$WhatIf) { Start-Sleep -Seconds 10 } # Allow time for mailbox type change to propagate
+  if ((Get-Mailbox @params).IsShared -eq $true) {
+   Write-Warning ('{0},{1},{2}, Mailbox still in Shared state.' -f $msgData)
+   if (!$WhatIf) { return } # Skip further processing
+  }
+  Write-Host ('{0},{1},{2},Mailbox converted from Shared to Regular' -f $msgData) -F Green
+  $_
+ }
+}
+
 function Enable-EmailForwarding {
  process {
   Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkYellow
@@ -478,11 +496,12 @@ do {
               Confirm-OrgEmail |
                Confirm-GSuite |
                 Update-ADPW |
-                 Enable-EmailForwarding |
-                  Enable-EmailRetention |
-                   Update-IntDB $intSQLInstance $NewAccountsTable |
-                    Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                     Complete-Processing
+                 Convert-FromSharedMailbox |
+                  Enable-EmailForwarding |
+                   Enable-EmailRetention |
+                    Update-IntDB $intSQLInstance $NewAccountsTable |
+                     Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                      Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

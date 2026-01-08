@@ -368,6 +368,22 @@ function Remove-TmpEXOs {
  Set-Location $myDir
 }
 
+function Set-AdExpirationDate {
+ begin {
+  $shortTermTypes = 'student teacher', 'coach', 'volunteer', 'student worker', 'intern'
+ }
+ process {
+  if ( ($_.empid -match '^\d{7,}$') -or ($shortTermTypes -match $_.new.jobType) ) {
+   # ♥ If current month is greater than 6 (June), set AccountExpirationDate to after the end of the current school term. ♥
+   $year = '{0:yyyy}' -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
+   $accountExpirationDate = Get-Date "July 30 $year"
+   Write-Host ('{0},{1},Setting Account Expiration to: {2}' -f $MyInvocation.MyCommand.Name, $samid, $accountExpirationDate) -F DarkCyan
+   if (!$WhatIf) { Set-ADUser -Identity $_.ad.ObjectGUID -AccountExpirationDate $AccountExpirationDate }
+  }
+  $_
+ }
+}
+
 function Update-ADGroups {
  begin {
   $A5 = 'Office365_A5_Faculty' # Microsoft 365 License for admin and office staff
@@ -479,29 +495,30 @@ do {
   Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ActiveDirectoryCredential
  }
 
- $newAccounts |
+ $accountObjs = $newAccounts |
   Format-Object |
    Add-EmpId |
     Add-ADData |
      Add-ADName |
       Add-ADSamId |
-       Add-Info |
-        Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
-         Add-EmailAddresses $Domain1 $Domain2 |
-          Add-AccountStatus |
-           Add-SiteData $lookupTable |
-            New-UserADObj |
-             Update-ADGroups |
-              # New-HomeDir $FileServerCredential $FullAccess |
-              Confirm-OrgEmail |
-               Confirm-GSuite |
-                Update-ADPW |
-                 Convert-FromSharedMailbox |
-                  Enable-EmailForwarding |
-                   Enable-EmailRetention |
-                    Update-IntDB $intSQLInstance $NewAccountsTable |
-                     Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                      Complete-Processing
+       Add-Info
+ $accountObjs |
+  Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
+   Add-EmailAddresses $Domain1 $Domain2 |
+    Add-AccountStatus |
+     Add-SiteData $lookupTable |
+      New-UserADObj |
+       Set-AdExpirationDate |
+        Update-ADGroups |
+         Confirm-OrgEmail |
+          Confirm-GSuite |
+           Update-ADPW |
+            Convert-FromSharedMailbox |
+             Enable-EmailForwarding |
+              Enable-EmailRetention |
+               Update-IntDB $intSQLInstance $NewAccountsTable |
+                Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                 Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

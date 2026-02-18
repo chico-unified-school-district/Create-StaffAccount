@@ -327,14 +327,14 @@ function Enable-EmailForwarding {
  }
 }
 
-function Enable-ExchRemoteMailbox ($domain) {
+function Enable-ExchRemoteMailbox ($msdomain) {
  process {
   $remoteMailBox = Get-RemoteMailbox -Filter "PrimarySmtpAddress -eq '$($_.emailWork )'"
   if ($remoteMailBox) { return $_ } # Already enabled
   Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
   $params = @{
    Identity             = $_.name
-   RemoteRoutingAddress = $_.samid + $domain
+   RemoteRoutingAddress = $_.samid + $msdomain
    WhatIf               = $WhatIf
   }
   Enable-RemoteMailbox @params

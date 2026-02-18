@@ -267,7 +267,8 @@ function Confirm-GSuite {
 
 function Confirm-OrgEmail {
  process {
-  Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.emailWork)
+  if (!$_.ad.UserPrincipalName) { return }
+  Write-Verbose ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info)
   $upn = $_.ad.UserPrincipalName
   $params = @{
    filter      = "UserPrincipalName -eq '$upn'"
@@ -275,8 +276,8 @@ function Confirm-OrgEmail {
   }
   $mailBox = Get-EXOMailbox @params
   # Stop processing until mailbox exists in the cloud
-  if ($mailBox.UserPrincipalName -ne $_.ad.UserPrincipalName) { return }
-  Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.emailWork) -F Green
+  if (!$mailBox) { return }
+  Write-Host ('{0},[{1}],Mailbox found!' -f $MyInvocation.MyCommand.Name, $_.info) -F Green
   $_.mailbox = $mailBox
   $_
  }
@@ -295,9 +296,8 @@ function Connect-LocalExchangeServer {
    Credential        = $Credential
    ErrorAction       = 'Stop'
   }
-  Write-Host ('Connecting to local Exchange Server: {0}' -f $Server) -F Green
+  Write-Verbose ('Connecting to local Exchange Server: {0}' -f $Server)
   $session = New-PSSession @sessionParams
-  # Write-Host ('Import local Exchange Server Session: {0}' -f $Server) -F Blue
   Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox | Out-Null
  }
 }
@@ -328,15 +328,16 @@ function Enable-EmailForwarding {
  }
 }
 
-function Enable-ExchRemoteMailbox ($msdomain) {
+function Enable-ExchRemoteMailbox ($domain) {
  process {
-  $remoteMailBox = Get-RemoteMailbox -Filter "PrimarySmtpAddress -eq '$($_.emailWork )'"
+  $remoteMailBox = Get-RemoteMailbox -Filter "PrimarySmtpAddress -eq '$($_.emailWork)'"
   if ($remoteMailBox) { return $_ } # Already enabled
-  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
+  Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkCyan
   $params = @{
    Identity             = $_.name
-   RemoteRoutingAddress = $_.samid + $msdomain
+   RemoteRoutingAddress = $_.samid + $domain
    WhatIf               = $WhatIf
+
   }
   Enable-RemoteMailbox @params
   $_
@@ -357,34 +358,26 @@ function Format-Object {
    ad          = $null
    company     = $Organization
    empId       = $_.empId
-   fn          = $fn
+   fn          = $null
    emailWork   = $null
    empIdExists = $null
    mailbox     = $null
    gSuite      = $null
    info        = $null
-   ln          = $ln
-   mi          = $mn
-   name        = $newName
+   ln          = $null
+   mi          = $null
+   name        = $null
    new         = $_
    pw1         = New-PassPhrase
    pw2         = New-PassPhrase
    pwReset     = $null
-   samid       = $samId
+   samid       = $null
    site        = $null
    status      = $null
    targetOU    = $TargetOrgUnit
   }
  }
 }
-
-# function New-HomeDir ($fsUser, $full) {
-#  process {
-#   # Begin Switch to 'New HDrive Location' AD group
-#   $_ | New-StaffHomeDir $fsUser $full
-#   $_
-#  }
-# }
 
 function New-UserADObj {
  process {
@@ -415,8 +408,36 @@ function Set-AdExpirationDate {
    # ♥ If current month is greater than 6 (June), set AccountExpirationDate to after the end of the current school term. ♥
    $year = '{0:yyyy}' -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
    $accountExpirationDate = Get-Date "July 30 $year"
-   Write-Host ('{0},{1},Setting Account Expiration to: {2}' -f $MyInvocation.MyCommand.Name, $samid, $accountExpirationDate) -F DarkCyan
+   Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $accountExpirationDate) -F Blue -b White
    if (!$WhatIf) { Set-ADUser -Identity $_.ad.ObjectGUID -AccountExpirationDate $AccountExpirationDate }
+  }
+  $_
+ }
+}
+
+function Update-ADMiddleName {
+ process {
+  if ($_.mi -notmatch '\w') { return $_ }
+  Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $_.mi) -F Blue -B White
+  $middleName = $_.mi
+  Set-ADUser -Identity $_.samid -Replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) } -WhatIf:$WhatIf
+  $_
+ }
+}
+
+function Update-ADCountry {
+ process {
+  Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Blue -B White
+  Set-ADUser -Identity $_.samid -Replace @{co = 'United States'; countryCode = 840 } -WhatIf:$WhatIf
+  $_
+ }
+}
+
+function Update-ADDepartment {
+ process {
+  if ($_.new.siteCode -match '\d') {
+   Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $_.new.siteCode) -F Blue -B White
+   Set-ADUser $_.samid -Replace @{DepartmentNumber = $_.new.siteCode } -WhatIf:$WhatIf
   }
   $_
  }
@@ -499,19 +520,18 @@ function Update-IntDBEmpId ($sqlInstance, $table) {
 # ===================================================== main =====================================================
 Import-Module -Name ExchangeOnlineManagement -Cmdlet Connect-ExchangeOnline, Get-EXOMailBox, Disconnect-ExchangeOnline, Set-Mailbox
 Import-Module -Name dbatools -Cmdlet Set-DbatoolsConfig, Invoke-DbaQuery, Connect-DbaInstance, Disconnect-DbaInstance
-Import-Module -Name CommonScriptFunctions -Cmdlet Show-TestRun, New-SqlOperation, Clear-SessionData, New-RandomPassword
+Import-Module -Name CommonScriptFunctions -Cmdlet Show-TestRun, New-SqlOperation, Clear-SessionData
 
 Show-BlockInfo Main
-Clear-SessionData
 if ($WhatIf) { Show-TestRun }
 
 # Imported Functions
 . .\lib\New-ADUserObject.ps1
 . .\lib\New-PassPhrase.ps1
-# . .\lib\New-StaffHomeDir.ps1
 
 $gam = 'C:\GAM7\gam.exe'
 
+Clear-SessionData
 Disconnect-ExchangeOnline -Confirm:$false
 
 $empSQLInstance = Connect-DbaInstance -SqlInstance $EmployeeServer -Database $EmployeeDatabase -SqlCredential $EmployeeCredential
@@ -542,24 +562,28 @@ do {
      Add-ADName |
       Add-ADSamId |
        Add-Info
+
  $accountObjs |
   Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
    Add-EmailAddresses $Domain1 $Domain2 |
     Add-AccountStatus |
      Add-SiteData $lookupTable |
       New-UserADObj |
-       Set-AdExpirationDate |
-        Update-ADGroups |
-         Enable-ExchRemoteMailbox $O365Domain |
-          Confirm-OrgEmail |
-           Confirm-GSuite |
-            Update-ADPW |
-             Convert-FromSharedMailbox |
-              Enable-EmailForwarding |
-               Enable-EmailRetention |
-                Update-IntDB $intSQLInstance $NewAccountsTable |
-                 Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                  Complete-Processing
+       Update-ADGroups |
+        Enable-ExchRemoteMailbox $O365Domain |
+         Confirm-OrgEmail |
+          Confirm-GSuite |
+           Update-ADCountry |
+            Update-ADDepartment |
+             Update-ADMiddleName |
+              Set-AdExpirationDate |
+               Update-ADPW |
+                Convert-FromSharedMailbox |
+                 Enable-EmailForwarding |
+                  Enable-EmailRetention |
+                   Update-IntDB $intSQLInstance $NewAccountsTable |
+                    Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                     Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

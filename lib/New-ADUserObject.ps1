@@ -16,7 +16,7 @@ empid, emailWork, pw1 (temporary password), targetOU, company, new.siteCode, new
 The same PSCustomObject passed in (object is emitted to the pipeline after operations complete).
 
 .NOTES
-This function depends on AD cmdlets (New-ADUser, Set-ADUser) being available and the caller setting $WhatIf if a dry
+This function depends on AD cmdlets (New-ADUser) being available and the caller setting $WhatIf if a dry
 run is required.
 #>
 function New-ADUserObject {
@@ -47,30 +47,5 @@ function New-ADUserObject {
   }
 
   New-ADUser @attributes -ErrorAction Stop | Out-Null
-
-  Write-Verbose ('{0},{2},Setting Extra User Attributes...' -f $MyInvocation.MyCommand.Name, $_.samid)
-
-  if (!$WhatIf -and ($_.mi -match '\w')) {
-   $middleName = $_.mi
-   Set-ADUser -Identity $_.samid -Replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) }
-  }
-
-  # Main Proxy address has 'SMTP' in UPPER case. Alternate Proxy Addresses use lowercase 'smpt'
-  # $proxyAddresses = "SMTP:$samid@chicousd.org", "smtp:$samid@mail.chicousd.org", "smtp:$samid@chicousd.mail.onmicrosoft.com"
-  # foreach ( $address in $proxyAddresses ) {
-  #  if (!$WhatIf) { Set-ADUser -Identity $samid -Add @{proxyAddresses = "$address" } }
-  # }
-  # $targetAddress = "SMTP:$samid@chicousd.mail.onmicrosoft.com"
-  if (!$WhatIf) {
-   Set-ADUser -Identity $_.samid -Replace @{
-    # targetAddress              = "$targetAddress"
-    # msExchRecipientDisplayType = 0
-    co          = 'United States'
-    countryCode = 840
-   }
-  }
-  if (!$WhatIf -and ($_.new.siteCode -match '\d')) { Set-ADUser $_.samid -Replace @{DepartmentNumber = $_.new.siteCode } }
-  # AD Sync Delay
-  if (!$WhatIf) { Start-Sleep 30 }
  } # End Process
 }

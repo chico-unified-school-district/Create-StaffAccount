@@ -136,6 +136,9 @@ param(
  [Alias('ADCred')][System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
  [string[]]$DefaultStaffGroups,
  [Alias('MSCred')] [System.Management.Automation.PSCredential]$O365Credential,
+ [string]$O365Domain,
+ [string]$ExchangeServer,
+ [Alias('ExchCred')] [System.Management.Automation.PSCredential]$ExchangeCredential,
  [Alias('FSCred')] [System.Management.Automation.PSCredential]$FileServerCredential,
  [string[]]$FullAccess,
  [string]$EmployeeServer,
@@ -279,6 +282,25 @@ function Confirm-OrgEmail {
  }
 }
 
+function Connect-LocalExchangeServer {
+ param (
+  [string]$Server,
+  [System.Management.Automation.PSCredential]$Credential
+ )
+ process {
+  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name) -F Green
+  $sessionParams = @{
+   ConfigurationName = 'Microsoft.Exchange'
+   ConnectionUri     = "http://$Server/PowerShell/"
+   Authentication    = 'Kerberos'
+   Credential        = $Credential
+   ErrorAction       = 'Stop'
+  }
+  $session = New-PSSession @sessionParams
+  Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox
+ }
+}
+
 function Convert-FromSharedMailbox {
  process {
   $msgData = $MyInvocation.MyCommand.Name, $_.ad.EmployeeID, $_.ad.Mail
@@ -301,6 +323,21 @@ function Enable-EmailForwarding {
  process {
   Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkYellow
   $_.mailbox | Set-Mailbox -ForwardingSmtpAddress $_.gSuite -DeliverToMailboxAndForward $true -WhatIf:$WhatIf
+  $_
+ }
+}
+
+function Enable-ExchRemoteMailbox ($domain) {
+ process {
+  $remoteMailBox = Get-RemoteMailbox -Filter "PrimarySmtpAddress -eq '$($_.emailWork )'"
+  if ($remoteMailBox) { return $_ } # Already enabled
+  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
+  $params = @{
+   Identity             = $_.name
+   RemoteRoutingAddress = "$($_.samid)@$domain"
+   WhatIf               = $WhatIf
+  }
+  Enable-RemoteMailbox @params
   $_
  }
 }
@@ -492,6 +529,7 @@ do {
   ConvertTo-Csv | ConvertFrom-Csv
  if ($newAccounts) {
   Connect-ExchangeOnline -Credential $O365Credential -ShowBanner:$false
+  Connect-LocalExchangeServer -Server $ExchangeServer -Credential $ExchangeCredential
   Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ActiveDirectoryCredential
  }
 
@@ -510,15 +548,16 @@ do {
       New-UserADObj |
        Set-AdExpirationDate |
         Update-ADGroups |
-         Confirm-OrgEmail |
-          Confirm-GSuite |
-           Update-ADPW |
-            Convert-FromSharedMailbox |
-             Enable-EmailForwarding |
-              Enable-EmailRetention |
-               Update-IntDB $intSQLInstance $NewAccountsTable |
-                Update-EmpEmailWork $empSQLInstance $EmployeeTable |
-                 Complete-Processing
+         Enable-ExchRemoteMailbox $O365Domain |
+          Confirm-OrgEmail |
+           Confirm-GSuite |
+            Update-ADPW |
+             Convert-FromSharedMailbox |
+              Enable-EmailForwarding |
+               Enable-EmailRetention |
+                Update-IntDB $intSQLInstance $NewAccountsTable |
+                 Update-EmpEmailWork $empSQLInstance $EmployeeTable |
+                  Complete-Processing
 
  Clear-SessionData
  Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue

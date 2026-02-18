@@ -334,7 +334,7 @@ function Enable-ExchRemoteMailbox ($domain) {
   Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
   $params = @{
    Identity             = $_.name
-   RemoteRoutingAddress = "$($_.samid)@$domain"
+   RemoteRoutingAddress = $_.samid + $domain
    WhatIf               = $WhatIf
   }
   Enable-RemoteMailbox @params

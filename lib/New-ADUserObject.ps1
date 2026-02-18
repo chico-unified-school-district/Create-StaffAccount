@@ -48,7 +48,7 @@ function New-ADUserObject {
 
   New-ADUser @attributes -ErrorAction Stop | Out-Null
 
-  Write-Verbose ('{0},{2},Setting Extra User Attributes...' -f $MyInvocation.MyCommand.Name)
+  Write-Verbose ('{0},{2},Setting Extra User Attributes...' -f $MyInvocation.MyCommand.Name, $_.samid)
 
   if (!$WhatIf -and ($_.mi -match '\w')) {
    $middleName = $_.mi

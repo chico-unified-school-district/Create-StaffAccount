@@ -102,7 +102,7 @@ Below are short, comment-style contracts for external functions called by this s
 reference and are not substitutes for the implementations in `lib\`.
 
 New-ADUserObject
- - Inputs (via pipeline): a PSCustomObject with properties: name, fn, ln, mi, new (original row), samid, empid, emailWork,
+ - Inputs (via pipeline): a PSCustomObject with properties: name, fn, ln, mi, new (original row), samid, empId, emailWork,
      pw1 (plain-text temporary password), targetOU, company, site (site metadata), new.siteCode, new.jobType and WhatIf uses.
  - Output: Outputs the same pipeline object with AD object created; may write verbose/info messages.
  - Side effects: Creates AD user (New-ADUser) and updates attributes such as proxyAddresses, targetAddress and optionally
@@ -288,7 +288,6 @@ function Connect-LocalExchangeServer {
   [System.Management.Automation.PSCredential]$Credential
  )
  process {
-  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name) -F Green
   $sessionParams = @{
    ConfigurationName = 'Microsoft.Exchange'
    ConnectionUri     = "http://$Server/PowerShell/"
@@ -296,8 +295,10 @@ function Connect-LocalExchangeServer {
    Credential        = $Credential
    ErrorAction       = 'Stop'
   }
+  Write-Host ('Connecting to local Exchange Server: {0}' -f $Server) -F Green
   $session = New-PSSession @sessionParams
-  Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox
+  # Write-Host ('Import local Exchange Server Session: {0}' -f $Server) -F Blue
+  Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox | Out-Null
  }
 }
 
@@ -410,7 +411,7 @@ function Set-AdExpirationDate {
   $shortTermTypes = 'student teacher', 'coach', 'volunteer', 'student worker', 'intern'
  }
  process {
-  if ( ($_.empid -match '^\d{7,}$') -or ($shortTermTypes -match $_.new.jobType) ) {
+  if ( ($_.empId -match '^\d{7,}$') -or ($shortTermTypes -match $_.new.jobType) ) {
    # ♥ If current month is greater than 6 (June), set AccountExpirationDate to after the end of the current school term. ♥
    $year = '{0:yyyy}' -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
    $accountExpirationDate = Get-Date "July 30 $year"
@@ -501,6 +502,7 @@ Import-Module -Name dbatools -Cmdlet Set-DbatoolsConfig, Invoke-DbaQuery, Connec
 Import-Module -Name CommonScriptFunctions -Cmdlet Show-TestRun, New-SqlOperation, Clear-SessionData, New-RandomPassword
 
 Show-BlockInfo Main
+Clear-SessionData
 if ($WhatIf) { Show-TestRun }
 
 # Imported Functions

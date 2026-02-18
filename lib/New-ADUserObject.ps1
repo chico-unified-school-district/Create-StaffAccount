@@ -48,11 +48,11 @@ function New-ADUserObject {
 
   New-ADUser @attributes -ErrorAction Stop | Out-Null
 
-  Write-Verbose ('{0},Setting Extra User Attributes...' -f $MyInvocation.MyCommand.Name)
+  Write-Verbose ('{0},{2},Setting Extra User Attributes...' -f $MyInvocation.MyCommand.Name)
 
   if (!$WhatIf -and ($_.mi -match '\w')) {
    $middleName = $_.mi
-   Set-ADUser -Identity $samid -Replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) }
+   Set-ADUser -Identity $_.samid -Replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) }
   }
 
   # Main Proxy address has 'SMTP' in UPPER case. Alternate Proxy Addresses use lowercase 'smpt'
@@ -62,15 +62,15 @@ function New-ADUserObject {
   # }
   # $targetAddress = "SMTP:$samid@chicousd.mail.onmicrosoft.com"
   if (!$WhatIf) {
-   Set-ADUser -Identity $samid -Replace @{
+   Set-ADUser -Identity $_.samid -Replace @{
     # targetAddress              = "$targetAddress"
     # msExchRecipientDisplayType = 0
     co          = 'United States'
     countryCode = 840
    }
   }
-  if (!$WhatIf -and ($_.new.siteCode -match '\d')) { Set-ADUser $samid -Replace @{DepartmentNumber = $_.new.siteCode } }
+  if (!$WhatIf -and ($_.new.siteCode -match '\d')) { Set-ADUser $_.samid -Replace @{DepartmentNumber = $_.new.siteCode } }
   # AD Sync Delay
-  if (!$WhatIf) { Start-Sleep 7 }
+  if (!$WhatIf) { Start-Sleep 30 }
  } # End Process
 }

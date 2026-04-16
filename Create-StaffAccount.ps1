@@ -1,4 +1,4 @@
-[cmdletbinding()]
+﻿[cmdletbinding()]
 <#
 .SYNOPSIS
 Creates and provisions staff accounts by monitoring an intermediate database table for new employees
@@ -26,12 +26,6 @@ groups based on HR fields and site-specific groups from the lookup table.
 
 .PARAMETER O365Credential
 A PSCredential used to connect to ExchangeOnline (Connect-ExchangeOnline) to manage mailboxes and retention/forwarding.
-
-.PARAMETER FileServerCredential
-Credentials used when creating home directories on remote file servers (New-StaffHomeDir uses these credentials).
-
-.PARAMETER FullAccess
-Array of group or user identifiers that should receive full access ACLs on newly created home directories.
 
 .PARAMETER EmployeeServer
 The SQL Server (instance name/address) hosting the authoritative employee database.
@@ -78,17 +72,17 @@ switch is set.
 
 .EXAMPLE
 .
-PS> .\Create-StaffAccount.ps1 -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01','dc02' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -FileServerCredential (Get-Credential)
+PS> .\Create-StaffAccount.ps1 -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01','dc02' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential)
 
 Runs in normal (non-WhatIf) mode and will attempt to provision any rows returned by the intermediate query.
 
 .EXAMPLE
 # Dry-run: preview changes without making modifications to AD, Exchange or file servers
-PS> .\Create-StaffAccount.ps1 -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -FileServerCredential (Get-Credential) -WhatIf
+PS> .\Create-StaffAccount.ps1 -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -WhatIf
 
 .EXAMPLE
 # Scheduled/CI invocation example (PowerShell scheduled task or Jenkins):
-PS> powershell -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\Create-StaffAccount.ps1" -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential) -FileServerCredential (Get-Credential)
+PS> powershell -NoProfile -ExecutionPolicy Bypass -File "C:\path\to\Create-StaffAccount.ps1" -IntermediateSqlServer 'sql01' -IntermediateDatabase 'intdb' -NewAccountsTable 'dbo.NewEmployees' -IntermediateCredential (Get-Credential) -DomainControllers 'dc01' -ActiveDirectoryCredential (Get-Credential) -O365Credential (Get-Credential)
 
 .NOTES
 - The script requires the following modules to be available: ExchangeOnlineManagement, dbatools, CommonScriptFunctions.
@@ -139,8 +133,6 @@ param(
  [string]$O365Domain,
  [string]$ExchangeServer,
  [Alias('ExchCred')] [System.Management.Automation.PSCredential]$ExchangeCredential,
- [Alias('FSCred')] [System.Management.Automation.PSCredential]$FileServerCredential,
- [string[]]$FullAccess,
  [string]$EmployeeServer,
  [string]$EmployeeDatabase,
  [string]$EmployeeTable,
@@ -205,7 +197,7 @@ function Add-ADSamId {
  }
 }
 
-function Add-EmailAddresses ($dom1, $dom2) {
+function Add-EmailAddress ($dom1, $dom2) {
  process {
   $_.emailWork = $_.samid + $dom1
   $_.gSuite = $_.samid + $dom2
@@ -352,11 +344,11 @@ function Enable-EmailRetention {
  }
 }
 
-function Format-Object {
+function Format-Object ($org, $ou) {
  process {
   [PSCustomObject]@{
    ad          = $null
-   company     = $Organization
+   company     = $org
    empId       = $_.empId
    fn          = $null
    emailWork   = $null
@@ -374,7 +366,7 @@ function Format-Object {
    samid       = $null
    site        = $null
    status      = $null
-   targetOU    = $TargetOrgUnit
+   targetOU    = $ou
   }
  }
 }
@@ -387,7 +379,7 @@ function New-UserADObj {
  }
 }
 
-function Remove-TmpEXOs {
+function Remove-TmpEXO {
  Start-Sleep 10
  Write-Host ('{0}' -f $MyInvocation.MyCommand.Name)
  $cutOff = (Get-Date).AddDays(-1)
@@ -443,7 +435,7 @@ function Update-ADDepartment {
  }
 }
 
-function Update-ADGroups {
+function Update-ADGroup ($defaultGroups) {
  begin {
   $A5 = 'Office365_A5_Faculty' # Microsoft 365 License for admin and office staff
   $A1 = 'Office365_A1_Faculty' # Microsoft 365 License for general staff
@@ -453,7 +445,7 @@ function Update-ADGroups {
   Write-Verbose ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.samid)
   $licenseGroup = if ($_.emp.BargUnitId -eq 'CUMA') { $A5 } else { $A1 } # HR rarely has this data correct, so A1 is default.
   # Add user to various groups
-  $groups = $DefaultStaffGroups + $licenseGroup
+  $groups = $defaultGroups + $licenseGroup
   if ( $_.site.Groups ) { $groups += $_.site.Groups.Split(',') }
 
   $msg = $MyInvocation.MyCommand.Name, $_.ad.SamAccountName, ($groups -join ',')
@@ -532,6 +524,7 @@ if ($WhatIf) { Show-TestRun }
 $gam = 'C:\GAM7\gam.exe'
 
 Clear-SessionData
+
 Disconnect-ExchangeOnline -Confirm:$false
 
 $empSQLInstance = Connect-DbaInstance -SqlInstance $EmployeeServer -Database $EmployeeDatabase -SqlCredential $EmployeeCredential
@@ -556,7 +549,7 @@ do {
  }
 
  $accountObjs = $newAccounts |
-  Format-Object |
+  Format-Object $Organization $TargetOrgUnit |
    Add-EmpId |
     Add-ADData |
      Add-ADName |
@@ -565,11 +558,11 @@ do {
 
  $accountObjs |
   Update-IntDBEmpId $intSQLInstance $NewAccountsTable |
-   Add-EmailAddresses $Domain1 $Domain2 |
+   Add-EmailAddress $Domain1 $Domain2 |
     Add-AccountStatus |
      Add-SiteData $lookupTable |
       New-UserADObj |
-       Update-ADGroups |
+       Update-ADGroup $DefaultStaffGroups |
         Enable-ExchRemoteMailbox $O365Domain |
          Confirm-OrgEmail |
           Confirm-GSuite |
@@ -591,5 +584,5 @@ do {
  Start-Sleep $delay
 } until ( $WhatIf -or ((Get-Date) -ge $stopTime) )
 
-if (!$WhatIf) { Remove-TmpEXOs }
+if (!$WhatIf) { Remove-TmpEXO }
 if ($WhatIf) { Show-TestRun }

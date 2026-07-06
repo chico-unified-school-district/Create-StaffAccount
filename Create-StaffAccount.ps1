@@ -151,7 +151,7 @@ param(
 function Add-AccountStatus {
  process {
   if ( $_.ad -and $_.ad.WhenCreated -lt ((Get-Date).AddDays(-180)) ) {
-   $_.status = 'Account Already Exists'
+   $_.status = 'Password Unchanged - USE PREVIOUS PASSWORD'
   }
   $_
  }
@@ -457,7 +457,7 @@ function Update-ADGroup ($defaultGroups) {
 
 function Update-ADPW {
  process {
-  if (($_.status -eq 'Account Already Exists')) { $_.pw2 = $_.status } else {
+  if ($_.status -eq 'Password Unchanged - USE PREVIOUS PASSWORD') { $_.pw2 = $_.status } else {
    Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info ) -F Yellow
    $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
    # Updating the password activates the GSuite account

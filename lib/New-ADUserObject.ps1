@@ -19,10 +19,10 @@ The same PSCustomObject passed in (object is emitted to the pipeline after opera
 This function depends on AD cmdlets (New-ADUser) being available and the caller setting $WhatIf if a dry
 run is required.
 #>
-function New-ADUserObject {
+function New-ADUserObject ([PSCredential]$adCred) {
  process {
   $securePw = ConvertTo-SecureString -String $_.pw1 -AsPlainText -Force
-  $attributes = @{
+  $params = @{
    Name                  = $_.name
    DisplayName           = $_.name
    GivenName             = $_.fn
@@ -43,9 +43,10 @@ function New-ADUserObject {
    CannotChangePassword  = $False
    ChangePasswordAtLogon = $False
    PasswordNotRequired   = $True
+   Credential            = $adCred
    WhatIf                = $WhatIf
   }
 
-  New-ADUser @attributes -ErrorAction Stop | Out-Null
+  New-ADUser @params -ErrorAction Stop | Out-Null
  } # End Process
 }

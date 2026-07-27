@@ -201,7 +201,7 @@ function Add-EmpId {
  begin {
   function randomEmpId {
    do { $id = Get-Random -Min 10000000 -Max 99999999; Write-Verbose $id }
-   until ( !(Get-ADUser -Filter " EmployeeId -eq '$id'"))
+   until ( !(Get-ADUser -Filter " EmployeeId -eq '$id'" -Credential $ADCredential))
    $id
   }
  }
@@ -367,7 +367,7 @@ function New-UserADObj {
  process {
   if ($_.ad) { return $_ }
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Yellow
-  $_ | New-ADUserObject
+  $_ | New-ADUserObject -adCred $ADCredential
  }
 }
 
@@ -393,7 +393,7 @@ function Set-AdExpirationDate {
    $year = '{0:yyyy}' -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
    $accountExpirationDate = Get-Date "July 30 $year"
    Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $accountExpirationDate) -F Blue -b White
-   if (!$WhatIf) { Set-ADUser -Identity $_.ad.ObjectGUID -AccountExpirationDate $accountExpirationDate }
+   if (!$WhatIf) { Set-ADUser -Identity $_.ad.ObjectGUID -AccountExpirationDate $accountExpirationDate -Credential $ADCredential }
   }
   $_
  }
@@ -404,7 +404,7 @@ function Update-ADMiddleName {
   if ($_.mi -notmatch '\w') { return $_ }
   Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $_.mi) -F Blue -B White
   $middleName = $_.mi
-  Set-ADUser -Identity $_.samid -Replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) } -WhatIf:$WhatIf
+  Set-ADUser -Identity $_.samid -Replace @{middleName = "$middleName"; Initials = $($middleName.substring(0, 1)) } -Credential $ADCredential -WhatIf:$WhatIf
   $_
  }
 }
@@ -412,7 +412,7 @@ function Update-ADMiddleName {
 function Update-ADCountry {
  process {
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Blue -B White
-  Set-ADUser -Identity $_.samid -Replace @{co = 'United States'; countryCode = 840 } -WhatIf:$WhatIf
+  Set-ADUser -Identity $_.samid -Replace @{co = 'United States'; countryCode = 840 } -Credential $ADCredential -WhatIf:$WhatIf
   $_
  }
 }
@@ -421,7 +421,7 @@ function Update-ADDepartment {
  process {
   if ($_.new.siteCode -match '\d') {
    Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $_.new.siteCode) -F Blue -B White
-   Set-ADUser $_.samid -Replace @{DepartmentNumber = $_.new.siteCode } -WhatIf:$WhatIf
+   Set-ADUser $_.samid -Replace @{DepartmentNumber = $_.new.siteCode } -Credential $ADCredential -WhatIf:$WhatIf
   }
   $_
  }
@@ -442,7 +442,7 @@ function Update-ADGroup ($defaultGroups) {
 
   $msg = $MyInvocation.MyCommand.Name, $_.ad.SamAccountName, ($groups -join ',')
   Write-Host ('{0},[{1}],[{2}]' -f $msg) -F Yellow
-  Add-ADPrincipalGroupMembership -Identity $_.ad.ObjectGUID -MemberOf $groups -WhatIf:$WhatIf
+  Add-ADPrincipalGroupMembership -Identity $_.ad.ObjectGUID -MemberOf $groups -Credential $ADCredential -WhatIf:$WhatIf
   $_
  }
 }
@@ -453,7 +453,7 @@ function Update-ADPW {
    Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info ) -F Yellow
    $securePw = ConvertTo-SecureString -String $_.pw2 -AsPlainText -Force
    # Updating the password activates the GSuite account
-   Set-ADAccountPassword -Identity $_.ad.ObjectGUID -NewPassword $securePw -Confirm:$false -WhatIf:$WhatIf
+   Set-ADAccountPassword -Identity $_.ad.ObjectGUID -NewPassword $securePw -Confirm:$false -Credential $ADCredential -WhatIf:$WhatIf
    $_.pwReset = $true
   }
   $_

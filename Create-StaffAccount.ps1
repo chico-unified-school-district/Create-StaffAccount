@@ -17,7 +17,7 @@ day until a configured stop time). It supports a -WhatIf switch to preview actio
 An array of Active Directory Domain Controller hostnames to use when connecting to AD. Passed through to
 Connect-ADSession / AD cmdlets.
 
-.PARAMETER ActiveDirectoryCredential
+.PARAMETER ADCredential
 A PSCredential object used to authenticate to Active Directory when creating or updating user objects.
 
 .PARAMETER DefaultStaffGroups
@@ -102,13 +102,6 @@ New-ADUserObject
  - Side effects: Creates AD user (New-ADUser) and updates attributes such as proxyAddresses, targetAddress and optionally
      AccountExpirationDate and middleName.
 
-New-StaffHomeDir
- - Parameters: ($cred, [string[]]$full) where $cred is PSCredential used to mount a remote share and $full is an array
-     of groups/users to grant ACLs to.
- - Inputs (via pipeline): a PSCustomObject including samid and site.FileServer where home directories should be created.
- - Behavior: Creates a directory \<FileServer>\User\<samid>\Documents, sets ACLs with ICACLS and grants access to the
-     supplied $full accounts and the user.
-
 New-PassPhrase
  - No parameters. Returns a string: a generated passphrase used as a temporary password (13-16 chars) composed from
      dictionaries under `lib\`.
@@ -125,23 +118,22 @@ Format-Name
 #>
 [cmdletbinding()]
 param(
- [Alias('DCs')]
  [string[]]$DomainControllers,
- [Alias('ADCred')][System.Management.Automation.PSCredential]$ActiveDirectoryCredential,
+ [PSCredential]$ADCredential,
  [string[]]$DefaultStaffGroups,
- [Alias('MSCred')] [System.Management.Automation.PSCredential]$O365Credential,
+ [PSCredential]$O365Credential,
  [string]$O365Domain,
  [string]$ExchangeServer,
- [Alias('ExchCred')] [System.Management.Automation.PSCredential]$ExchangeCredential,
+ [PSCredential]$ExchangeCredential,
  [string]$EmployeeServer,
  [string]$EmployeeDatabase,
  [string]$EmployeeTable,
- [System.Management.Automation.PSCredential]$EmployeeCredential,
- [Alias('IntServer')][string]$IntermediateSqlServer,
- [Alias('IntDB')][string]$IntermediateDatabase,
- [Alias('Table')][string]$NewAccountsTable,
- [Alias('IntCred')][System.Management.Automation.PSCredential]$IntermediateCredential,
- [Alias('OU')][string]$TargetOrgUnit,
+ [PSCredential]$EmployeeCredential,
+ [string]$IntermediateSqlServer,
+ [string]$IntermediateDatabase,
+ [string]$NewAccountsTable,
+ [PSCredential]$IntermediateCredential,
+ [string]$TargetOrgUnit,
  [string]$Organization,
  [string]$Domain1,
  [string]$Domain2,
@@ -160,7 +152,7 @@ function Add-AccountStatus {
 function Add-ADData {
  process {
   $filter = "EmployeeID -eq '{0}'" -f $_.empId
-  $_.ad = Get-ADUser -Filter $filter -Properties *
+  $_.ad = Get-ADUser -Filter $filter -Properties * -Credential $ADCredential
   $_
  }
 }
@@ -248,9 +240,7 @@ function Complete-Processing {
 
 function Confirm-GSuite {
  process {
-  $ErrorActionPreference = 'Continue'
-  ($gUser = & $gam print users query "email: $($_.gSuite)" | ConvertFrom-Csv)*>$null
-  $ErrorActionPreference = 'Stop'
+  ($gUser = & $gam redirect stderr null print users query "email: $($_.gSuite)" | ConvertFrom-Csv)*>$null
   if ($gUser.PrimaryEmail -ne $_.gSuite) { return }
   Write-Host ('{0},[{1}],Gsuite Found!' -f $MyInvocation.MyCommand.Name, $_.gSuite) -F Green
   $_
@@ -278,7 +268,7 @@ function Confirm-OrgEmail {
 function Connect-LocalExchangeServer {
  param (
   [string]$Server,
-  [System.Management.Automation.PSCredential]$Credential
+  [PSCredential]$Credential
  )
  process {
   $sessionParams = @{
@@ -314,8 +304,9 @@ function Convert-FromSharedMailbox {
 
 function Enable-EmailForwarding {
  process {
+  if (!$_.mailbox) { return }
   Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkYellow
-  $_.mailbox | Set-Mailbox -ForwardingSmtpAddress $_.gSuite -DeliverToMailboxAndForward $true -WhatIf:$WhatIf
+  Set-Mailbox -Identity $_.mailbox.Identity -ForwardingSmtpAddress $_.gSuite -DeliverToMailboxAndForward $true -WhatIf:$WhatIf
   $_
  }
 }
@@ -338,8 +329,9 @@ function Enable-ExchRemoteMailbox ($domain) {
 
 function Enable-EmailRetention {
  process {
+  if (!$_.mailbox) { return }
   Write-Host ('{0},[{1}]' -f $MyInvocation.MyCommand.Name, $_.info) -F DarkYellow
-  $_.mailbox | Set-Mailbox -RetainDeletedItemsFor 30 -WhatIf:$WhatIf
+  Set-Mailbox -Identity $_.mailbox.Identity -RetainDeletedItemsFor 30 -WhatIf:$WhatIf
   $_
  }
 }
@@ -401,7 +393,7 @@ function Set-AdExpirationDate {
    $year = '{0:yyyy}' -f $(if ([int](Get-Date -f MM) -gt 6) { (Get-Date).AddYears(1) } else { Get-Date })
    $accountExpirationDate = Get-Date "July 30 $year"
    Write-Host ('{0},{1},{2}' -f $MyInvocation.MyCommand.Name, $_.info, $accountExpirationDate) -F Blue -b White
-   if (!$WhatIf) { Set-ADUser -Identity $_.ad.ObjectGUID -AccountExpirationDate $AccountExpirationDate }
+   if (!$WhatIf) { Set-ADUser -Identity $_.ad.ObjectGUID -AccountExpirationDate $accountExpirationDate }
   }
   $_
  }
@@ -491,6 +483,7 @@ function Update-IntDB ($sqlInstance, $table) {
   WHERE id = @id;"
  }
  process {
+  if (!$_.mailbox) { return }
   $sqlVars = @{id = $_.new.id; empId = $_.empId; samid = $_.ad.SamAccountName; mail = $_.emailWork; gmail = $_.gSuite; pw = $_.pw2 }
   Write-Verbose ('{0},{1},[{2}],[{3}]' -f $MyInvocation.MyCommand.Name, $_.info, $sql, ($sqlVars.Values -join ','))
   Write-Host ('{0},{1}' -f $MyInvocation.MyCommand.Name, $_.info) -F Cyan
@@ -545,7 +538,7 @@ do {
  if ($newAccounts) {
   Connect-ExchangeOnline -Credential $O365Credential -ShowBanner:$false
   Connect-LocalExchangeServer -Server $ExchangeServer -Credential $ExchangeCredential
-  Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ActiveDirectoryCredential
+  # Connect-ADSession -DomainControllers $DomainControllers -Cmdlets $cmdlets -Cred $ADCredential
  }
 
  $accountObjs = $newAccounts |

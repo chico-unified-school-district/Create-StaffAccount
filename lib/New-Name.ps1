@@ -1,6 +1,6 @@
-function New-Name ($first, $middle, $last) {
+function New-Name ($first, $middle, $last, [PSCredential]$adCred) {
  begin {
-  function Confirm-FreeName { process { if (-not(Get-ADUser -LDAPFilter "(name=$_)")) { $_ ; return } } }
+  function Confirm-FreeName { process { if (-not(Get-ADUser -LDAPFilter "(name=$_)" -Credential $adCred)) { $_ ; return } } }
   # $TextInfo = (Get-Culture).TextInfo
  }
  process {

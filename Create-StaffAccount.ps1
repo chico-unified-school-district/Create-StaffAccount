@@ -174,7 +174,7 @@ function Add-ADName {
   $_.fn = Format-Name $_.new.nameFirst
   $_.ln = Format-Name $_.new.nameLast
   $_.mi = Format-Name $_.new.nameMiddle
-  $_.name = if ($_.ad) { $_.ad.name } else { New-Name -first $_.fn -middle $_.mi -last $_.ln }
+  $_.name = if ($_.ad) { $_.ad.name } else { New-Name -first $_.fn -middle $_.mi -last $_.ln -adCred $ADCredential }
   $_
  }
 }
@@ -184,7 +184,7 @@ function Add-ADSamId {
   . .\lib\New-SamID.ps1
  }
  process {
-  $_.samid = if ($_.ad) { $_.ad.SamAccountName } else { New-SamID -F $_.fn -M $_.mi -L $_.ln }
+  $_.samid = if ($_.ad) { $_.ad.SamAccountName } else { New-SamID -F $_.fn -M $_.mi -L $_.ln -adCred $ADCredential }
   $_
  }
 }

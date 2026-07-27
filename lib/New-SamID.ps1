@@ -22,12 +22,10 @@ String - a SAM account name candidate (max 20 characters).
 function New-SamID {
  [cmdletbinding()]
  param(
-  [Parameter(Position = 0, Mandatory = $true)]
-  [string]$First,
-  [Parameter(Position = 1, Mandatory = $false)]
-  [string]$Middle,
-  [Parameter(Position = 2, Mandatory = $true)]
-  [string]$Last
+  [Parameter(Position = 0, Mandatory = $true)]  [string]$First,
+  [Parameter(Position = 1, Mandatory = $false)]  [string]$Middle,
+  [Parameter(Position = 2, Mandatory = $true)]  [string]$Last,
+  [PSCredential]$adCred
  )
 
  function Format-FirstLetter ($str) {
@@ -43,8 +41,8 @@ function New-SamID {
  }
  function outputFreeSam ($sam) {
   if (
-   -not( Get-ADUser -LDAPFilter "(samAccountName=$sam)" ) -and
-   -not( Get-ADUser -LDAPFilter "(proxyaddresses=smtp:$sam@*)" )
+   -not( Get-ADUser -LDAPFilter "(samAccountName=$sam)" -Credential $adCred) -and
+   -not( Get-ADUser -LDAPFilter "(proxyaddresses=smtp:$sam@*)" -Credential $adCred )
   ) { $sam }
  }
  function removeNonLetters ( $str ) { if ($str) { $str -replace '[^a-zA-Z]' } }

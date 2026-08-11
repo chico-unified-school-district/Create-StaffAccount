@@ -277,28 +277,30 @@ function Connect-LocalExchangeServer {
   Credential        = $Credential
   ErrorAction       = 'Stop'
  }
- while ( ((Test-Connection $Server -Count 1).status -ne 'Success') -and ($i -le 30) ) {
-  $i++
-  Write-Host ('{0},Attempt:{2}. Unable to reach {1}. Trying again in a bit.' -f $MyInvocation.MyCommand.Name, $Server, $i) -F Red
-  Start-Sleep 30
- }
-
- $i = 1
- do {
-  Write-Verbose ('Connecting to local Exchange Server: {0}' -f $Server)
-  try { $session = New-PSSession @sessionParams }
-  catch { $null }
-  $i++
-  if (!$session) {
-   Write-Host ('{0},Attempt:{2}. Creating session on {1} failed. Trying again in a bit.' -f $MyInvocation.MyCommand.Name, $Server, $i) -F Red
-   Start-Sleep 60
-  }
- } until ( $session -or ($i -eq 60) )
- if (!$session) {
-  Write-Host ('{0},Session Failed. Please ensure Exchange server {1} is accessible. Exiting.' -f $MyInvocation.MyCommand.Name, $Server)
-  exit
- }
+ # while ( ((Test-Connection $Server -Count 1).status -ne 'Success') -and ($i -le 30) ) {
+ #  $i++
+ #  Write-Host ('{0},Attempt:{2}. Unable to reach {1}. Trying again in a bit.' -f $MyInvocation.MyCommand.Name, $Server, $i) -F Red
+ #  Start-Sleep 30
+ # }
+ Write-Verbose ('Connecting to local Exchange Server: {0}' -f $Server)
+ $session = New-PSSession @sessionParams
  Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox -ErrorAction SilentlyContinue | Out-Null
+ # $i = 1
+ # do {
+ #  # Write-Verbose ('Connecting to local Exchange Server: {0}' -f $Server)
+ #  try { $session = New-PSSession @sessionParams }
+ #  catch { $null }
+ #  $i++
+ #  if (!$session) {
+ #   Write-Host ('{0},Attempt:{2}. Creating session on {1} failed. Trying again in a bit.' -f $MyInvocation.MyCommand.Name, $Server, $i) -F Red
+ #   Start-Sleep 60
+ #  }
+ # } until ( $session -or ($i -eq 60) )
+ # if (!$session) {
+ #  Write-Host ('{0},Session Failed. Please ensure Exchange server {1} is accessible. Exiting.' -f $MyInvocation.MyCommand.Name, $Server)
+ #  exit
+ # }
+ # Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox -ErrorAction SilentlyContinue | Out-Null
 }
 
 function Convert-FromSharedMailbox {

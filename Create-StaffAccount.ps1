@@ -184,7 +184,9 @@ function Add-ADSamId {
   . .\lib\New-SamID.ps1
  }
  process {
-  $_.samid = if ($_.ad) { $_.ad.SamAccountName } else { New-SamID -F $_.fn -M $_.mi -L $_.ln -adCred $ADCredential }
+  $_.samid = if ($_.ad) { $_.ad.SamAccountName }
+  elseif ($_.new.jobType -match 'Board Member') { $_.new.nameFirst + '.' + $_.new.nameLast }
+  else { New-SamID -First $_.fn -Middle $_.mi -Last $_.ln -adCred $ADCredential }
   $_
  }
 }
@@ -264,44 +266,6 @@ function Confirm-OrgEmail {
   $_
  }
 }
-
-# function Connect-LocalExchangeServer {
-#  param (
-#   [string]$Server,
-#   [PSCredential]$Credential
-#  )
-#  $sessionParams = @{
-#   ConfigurationName = 'Microsoft.Exchange'
-#   ConnectionUri     = "http://$Server/PowerShell/"
-#   Authentication    = 'Kerberos'
-#   Credential        = $Credential
-#   ErrorAction       = 'Stop'
-#  }
-#  # while ( ((Test-Connection $Server -Count 1).status -ne 'Success') -and ($i -le 30) ) {
-#  #  $i++
-#  #  Write-Host ('{0},Attempt:{2}. Unable to reach {1}. Trying again in a bit.' -f $MyInvocation.MyCommand.Name, $Server, $i) -F Red
-#  #  Start-Sleep 30
-#  # }
-#  Write-Verbose ('Connecting to local Exchange Server: {0}' -f $Server)
-#  $session = New-PSSession @sessionParams
-#  Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox | Out-Null
-#  # $i = 1
-#  # do {
-#  #  # Write-Verbose ('Connecting to local Exchange Server: {0}' -f $Server)
-#  #  try { $session = New-PSSession @sessionParams }
-#  #  catch { $null }
-#  #  $i++
-#  #  if (!$session) {
-#  #   Write-Host ('{0},Attempt:{2}. Creating session on {1} failed. Trying again in a bit.' -f $MyInvocation.MyCommand.Name, $Server, $i) -F Red
-#  #   Start-Sleep 60
-#  #  }
-#  # } until ( $session -or ($i -eq 60) )
-#  # if (!$session) {
-#  #  Write-Host ('{0},Session Failed. Please ensure Exchange server {1} is accessible. Exiting.' -f $MyInvocation.MyCommand.Name, $Server)
-#  #  exit
-#  # }
-#  # Import-PSSession $session -CommandName Get-RemoteMailbox, Enable-RemoteMailbox -ErrorAction SilentlyContinue | Out-Null
-# }
 
 function Connect-LocalExchangeServer {
  param (
